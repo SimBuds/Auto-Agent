@@ -75,7 +75,7 @@ and thinking mode is an explicit opt-in:
 
 ```bash
 alias lc='ollama run llama-seo-8b'
-alias lct='ollama run llama3.3:70b'   # 70B for high-quality drafting
+alias lct='ollama run llama3.3:70b'   # High-quality drafting via CPU/RAM offload
 ```
 
 ### Ollama systemd settings

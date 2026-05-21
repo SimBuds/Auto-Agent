@@ -37,7 +37,7 @@ uv sync
 source .venv/bin/activate        # puts `jobhunt` on PATH; or prefix commands with `uv run`
 playwright install chromium
 
-ollama pull qwen3.5:9b           # base model — all LLM tasks
+ollama pull llama3.1:8b          # base model — all LLM tasks
 ollama pull nomic-embed-text     # embeddings (reserved for future use)
 ```
 

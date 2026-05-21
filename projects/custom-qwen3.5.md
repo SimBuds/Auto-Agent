@@ -1,6 +1,6 @@
 # AI Context Stack
 
-Local Ollama agent structure for customizing `qwen3.5:9b` with layered prompts,
+Local Ollama agent structure for customizing `llama3.1:8b` with layered prompts,
 personal memory, and project knowledge.
 
 The goal is to keep the model customization transparent: edit plain Markdown
@@ -45,8 +45,8 @@ ai/
 
 Env overrides:
 - `AI_ROOT`     default `~/ai`
-- `MODEL_NAME`  default `qwen-custom`
-- `BASE_MODEL`  default `qwen3.5:9b`
+- `MODEL_NAME`  default `llama-seo-8b`
+- `BASE_MODEL`  default `llama3.1:8b`
 
 `build.sh` creates:
 
@@ -74,8 +74,8 @@ Recommended shell helpers (add to `~/.bashrc`) so `--think false` is the default
 and thinking mode is an explicit opt-in:
 
 ```bash
-qc()  { ollama run --think false qwen-custom "$@"; }
-qct() { ollama run qwen-custom "$@"; }   # thinking mode when needed
+alias lc='ollama run llama-seo-8b'
+alias lct='ollama run llama3.3:70b'   # 70B for high-quality drafting
 ```
 
 ### Ollama systemd settings
@@ -85,7 +85,7 @@ The gateway is tuned to a specific server config. Mirror these
 
 ```ini
 [Service]
-Environment="OLLAMA_KV_CACHE_TYPE=q5_0"
+Environment="OLLAMA_KV_CACHE_TYPE=q4_0"
 Environment="OLLAMA_FLASH_ATTENTION=1"
 Environment="OLLAMA_NUM_PARALLEL=1"
 Environment="OLLAMA_CONTEXT_LENGTH=16384"
@@ -114,16 +114,16 @@ Use this order when deciding where a change belongs:
 
 ## Model Notes
 
-The baseline is `qwen3.5:9b`, configured through Ollama parameters in the
-generated `Modelfile`. This repo does not fine-tune weights; it customizes the
-model through the system prompt and reference context.
+The baseline is `qwen3.5:9b` (Q6_K quantization). This provides a significant 
+jump in semantic coherence over Q4/Q5 for SEO tasks while fitting in the 9GB 
+VRAM partition.
 
 The current defaults are tuned for a concise technical assistant:
 
-- `temperature 0.6`
-- `top_p 0.95`
-- `top_k 20`
-- `repeat_penalty 1.15`
+- `temperature 0.88`
+- `top_p 0.9`
+- `top_k 40`
+- `repeat_penalty 1.2`
 - `repeat_last_n 256`
 - `num_predict 2048`
 - `num_ctx 16384`

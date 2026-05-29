@@ -1,253 +1,257 @@
 # Auto-Agent / Arch Linux AI Orchestration Stack
 
+> **Developer truth.** This file describes how the stack *actually* installs and
+> runs as of **May 2026**. The full blueprint and rationale live in
+> [PLAN.md](PLAN.md). If something here disagrees with older notes, this file wins.
+
 ## Overview
 
-A self-improving AI agent orchestration stack targeting **Arch Linux** as the primary host, with an **optional WSL 2** pathway for Windows users. The stack runs:
+A self-hosted AI agent stack for **Arch Linux** (desktop, bare metal). Two pieces,
+one job each:
 
-- **Hermes Agent** (Nous Research) — core agent, Claude API for inference
-- **OpenClaw** — Telegram/Discord bridge
-- **Claude Code** — developer-facing CLI/agent for working on the repo itself
-
-Capabilities are Linux-native: systemd, D-Bus, `notify-send`, and Signal/Matrix bridges (Telegram/Discord via OpenClaw).
-
-## Architecture
+- **Hermes Agent** (Nous Research, `v0.14.0` / `v2026.5.16`) — the **brain**.
+  Autonomous agent with persistent memory (SQLite + FTS5), 40+ tools, MCP, a
+  skills system, and Claude API for inference (built-in 1-hour prompt caching).
+- **OpenClaw** — the **front door**. A self-hosted messaging gateway that bridges
+  Telegram/Discord (and Signal, Matrix, Slack, …) to an agent backend. We point it
+  at Hermes as an **external agent runtime** rather than using its bundled agent.
+- **Claude Code** — developer-facing CLI on the host, for working on *this* repo.
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                Docker / Podman Compose                  │
-├─────────────────────────────────────────────────────────┤
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────┐  │
-│  │ Hermes Agent│  │  Postgres   │  │    Redis        │  │
-│  │ (Claude API)│  │  (Memory)   │  │   (Cache)       │  │
-│  └─────────────┘  └─────────────┘  └─────────────────┘  │
-│  ┌─────────────┐  ┌─────────────────────────────────┐   │
-│  │  OpenClaw   │  │  Capability Server (FastAPI)    │   │
-│  │ (TG/Discord)│  │  (Linux automation surface)     │   │
-│  └─────────────┘  └─────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────┘
-            ▲
-            │ host CLI
-   ┌────────┴────────┐
-   │   Claude Code   │  (runs on the host, edits this repo)
-   └─────────────────┘
+ Telegram / Discord
+        │
+        ▼
+ ┌──────────────┐  external agent runtime   ┌──────────────────────────┐
+ │   OpenClaw   │ ────────────────────────▶ │       Hermes Agent       │
+ │  (gateway)   │  (ACP / custom backend)   │  • Claude API (inference)│
+ │ npm, Node 24 │ ◀──────────────────────── │  • SQLite/FTS5 memory    │
+ └──────────────┘        replies            │  • 40+ tools, MCP, skills│
+        ▲                                    └────────────┬─────────────┘
+        │ Control UI 127.0.0.1:18789                      │ tool calls
+        │                                                 ▼
+        │                                   ┌──────────────────────────┐
+        │                                   │  Linux host (sandboxed)  │
+        │                                   │  bubblewrap + systemd     │
+        │                                   └──────────────────────────┘
+ Claude Code ── runs on host, edits this repo (separate from the runtime)
 ```
 
-## Target Hardware
+### Why this shape
 
-Two reference machines:
+Both Hermes and OpenClaw ship a *full* agent **and** a multi-channel gateway, so
+running both "as agents" is redundant. We split roles: **OpenClaw owns the chat
+channels, Hermes owns the thinking and memory.** See
+[PLAN.md › Architecture](PLAN.md#architecture) for the decision record.
 
-- **Desktop (Arch Linux)** — 32 GB RAM, 8–10 GB VRAM GPU, modern multi-core CPU
-- **Laptop (Windows 10 + WSL 2)** — same class: 32 GB RAM, 8–10 GB VRAM, modern CPU
+### What changed from the original draft (correcting May-2026 reality)
 
-With 32 GB and a real GPU, you have headroom to either (a) keep Claude API as the only inference path and use the spare RAM as cache/buffer, or (b) run a **local model alongside** Hermes (e.g. a quantized 7–13B in ~6–9 GB VRAM) for cheap/offline tasks and route hard tasks to Claude.
-
-Suggested allocation (Path A or B, host or WSL VM):
-
-| Component          | RAM budget | Notes                                  |
-| ------------------ | ---------- | -------------------------------------- |
-| Hermes Agent       | ~4 GB      | thin client to Claude API              |
-| Local LLM runtime  | ~2 GB RAM + 6–9 GB VRAM | optional; llama.cpp / Ollama / vLLM |
-| Postgres           | ~6 GB      | bumped — you have the RAM              |
-| Redis              | ~3 GB      |                                        |
-| Capability Server  | ~1 GB      |                                        |
-| OpenClaw           | ~0.5 GB    |                                        |
-| Host / VM reserve  | ~8 GB      | OS, browser, Claude Code, build tools  |
-
-On WSL 2 this budget applies **inside the VM** — cap it explicitly in `.wslconfig` (below) so Windows keeps enough for itself.
-
-### GPU notes
-
-- **Arch (desktop)**: NVIDIA → `nvidia`, `nvidia-utils`, `nvidia-container-toolkit`, then `--gpus all` in compose. AMD → ROCm packages, works with llama.cpp and Ollama.
-- **WSL 2 (laptop)**: NVIDIA GPU passthrough works on Windows 10 21H2+ with a recent NVIDIA driver (the Windows driver provides `/usr/lib/wsl/lib/libcuda.so.1` inside the distro — do **not** install a Linux NVIDIA driver in WSL). AMD GPU passthrough in WSL is effectively unsupported; if the laptop is AMD, plan to use Claude API only on that box.
+- Hermes is **not** a thin Claude client needing Postgres — it has its own
+  **SQLite/FTS5** memory. Postgres/Redis are dropped from the core stack.
+- Both tools install **natively** (pip / npm) and run as **systemd services**, not
+  primarily as Docker containers.
+- **WSL 2 / Windows path removed.** Windows 10 is EOL (2025-10-14; ESU only to
+  2026-10-13). The stack targets Arch desktop only.
 
 ---
 
-## Path A: Arch Linux (primary)
+## Target Hardware
 
-### 1. Prerequisites
+**Desktop (Arch Linux)** — 32 GB RAM, 8–10 GB VRAM GPU, modern multi-core CPU.
+
+Native services are light; the headroom buys you an **optional local LLM** for
+cheap/offline routing.
+
+| Component             | RAM budget          | Notes                                   |
+| --------------------- | ------------------- | --------------------------------------- |
+| Hermes Agent          | ~2–4 GB             | Claude API client + local tooling       |
+| OpenClaw gateway      | ~0.5–1 GB           | Node process + channel adapters         |
+| Local LLM (optional)  | ~2 GB RAM + 6–9 GB VRAM | llama.cpp / Ollama, OpenAI-compatible |
+| Host reserve          | the rest            | OS, browser, Claude Code, builds        |
+
+### GPU (only if you enable local inference)
+
+- **NVIDIA**: `nvidia`, `nvidia-utils`. For Ollama: `ollama-cuda`. Verify `nvidia-smi`.
+- **AMD**: ROCm packages (`rocm-hip-runtime`); works with llama.cpp and Ollama.
+
+---
+
+## Prerequisites
 
 ```bash
 sudo pacman -Syu
-sudo pacman -S --needed docker docker-compose git base-devel python uv
-sudo systemctl enable --now docker
-sudo usermod -aG docker "$USER"   # log out / back in
+sudo pacman -S --needed git base-devel python python-pip nodejs npm \
+                        bubblewrap ufw restic jq
+# Python 3.11 specifically for Hermes — install via uv if your system python is newer:
+sudo pacman -S --needed uv
 ```
 
-Optional (rootless): use `podman` + `podman-compose` instead; the compose file is compatible.
-
-Install Claude Code on the host:
+Optional local inference:
 
 ```bash
-# follow https://docs.claude.com/claude-code for the current installer
+sudo pacman -S --needed ollama        # or build llama.cpp
+# NVIDIA: sudo pacman -S ollama-cuda
 ```
 
-### 2. Clone & configure
+Install **Claude Code** on the host per the current installer:
+<https://docs.claude.com/claude-code>.
+
+---
+
+## Install
+
+### 0. Dedicated service user (recommended)
+
+Run the runtime as an unprivileged user, separate from your login account:
+
+```bash
+sudo useradd -m -s /usr/bin/bash agent
+sudo loginctl enable-linger agent      # lets user services run without an active login
+```
+
+Everything below runs **as `agent`** (`sudo -iu agent`) unless noted. Claude Code
+runs as **you** (`casey`) in the repo.
+
+### 1. Clone & configure
 
 ```bash
 git clone <this-repo> ~/Apps/Auto-Agent
 cd ~/Apps/Auto-Agent
-cp .env.example .env   # fill in ANTHROPIC_API_KEY, TELEGRAM_TOKEN, DISCORD_TOKEN
+cp .env.example .env       # fill in ANTHROPIC_API_KEY, TELEGRAM_TOKEN, DISCORD_TOKEN
+chmod 600 .env             # secrets are 0600, never committed
 ```
 
-### 3. Bring up the stack
+### 2. Install Hermes (the brain)
 
 ```bash
-docker compose up -d
-docker compose ps
-docker compose logs -f hermes
+# Pinned install — do not float to latest blindly.
+uv venv ~/.hermes/venv --python 3.11
+~/.hermes/venv/bin/pip install 'hermes-agent==0.14.0'
+~/.hermes/venv/bin/hermes --version    # expect v2026.5.16
 ```
 
-Capability server: `http://localhost:8000/docs`
-Postgres: `localhost:5432`  Redis: `localhost:6379`
+Configure Hermes for Claude API inference and local SQLite memory (see
+[deploy/hermes/](deploy/hermes/) for the config template). Key points:
 
-### 4. Run Claude Code against the repo
+- Model provider → Anthropic, your `ANTHROPIC_API_KEY`.
+- Memory → default SQLite store under `~/.hermes/` with WAL mode enabled.
+- Expose Hermes as an agent endpoint on **127.0.0.1** only (no LAN binding).
+
+### 3. Install OpenClaw (the front door)
+
+```bash
+# Node 24 (or 22.19+ LTS)
+npm install -g openclaw@latest
+openclaw onboard --install-daemon       # writes ~/.openclaw/openclaw.json + user service
+```
+
+Then edit `~/.openclaw/openclaw.json` to:
+
+- Point the **agent runtime at Hermes** (external/ACP backend → Hermes's local
+  endpoint), instead of OpenClaw's bundled agent.
+- Enable **Telegram** and **Discord** channels with tokens from `.env`.
+- **Allowlist** senders/chat IDs and set `requireMention` for group chats.
+- Keep the Control UI on its default `http://127.0.0.1:18789/` (loopback only).
+
+### 4. Run as systemd user services (hardened)
+
+Hardened unit skeletons live in [deploy/systemd/](deploy/systemd/):
+
+```bash
+mkdir -p ~/.config/systemd/user
+cp ~/Apps/Auto-Agent/deploy/systemd/*.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now hermes.service openclaw.service
+systemctl --user status hermes openclaw
+journalctl --user -u hermes -f
+```
+
+The units apply `NoNewPrivileges`, `ProtectSystem=strict`, `ProtectHome=read-only`
+(with explicit `ReadWritePaths`), `PrivateTmp`, a `SystemCallFilter`, an empty
+`CapabilityBoundingSet`, and `MemoryMax`/`CPUQuota` caps. Shell-style tools run
+inside a `bubblewrap` jail (see `deploy/bin/sandbox-shell`).
+
+### 5. Lock down the network
+
+```bash
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw enable
+# No inbound ports are opened. Control UI + Hermes endpoint stay on loopback.
+```
+
+If you need remote access, front it with an authenticated reverse proxy or a
+Tailscale/WireGuard tunnel — **never** expose the Control UI or Hermes port to the
+LAN/Internet directly.
+
+### 6. Run Claude Code against the repo
 
 ```bash
 cd ~/Apps/Auto-Agent
 claude
 ```
 
-Claude Code runs on the host (not in a container) so it can edit files directly and shell out to `docker compose`.
-
-### 5. Optional: run components as systemd user units
-
-If you don't want Docker managing lifecycle, the agent and capability server can run as `systemctl --user` units. Skeleton units live in `deploy/systemd/` (to be added).
+Claude Code runs on the host as you, edits files directly, and shells out to
+`systemctl --user` / git. It is *not* part of the agent runtime.
 
 ---
 
-## Path B: WSL 2 (optional)
+## Backups (the only stateful asset)
 
-Everything above works inside a WSL 2 Arch (or Ubuntu) distro **with these deltas**:
+Hermes's SQLite memory is the thing worth protecting.
 
-### B.1 Install WSL + Arch (Windows 10)
-
-Windows 10 needs version **21H2 or later** for modern WSL 2 (and for NVIDIA GPU passthrough). Check with `winver`.
-
-```powershell
-# PowerShell, admin
-wsl --install                 # installs WSL 2 + default distro
-wsl --update                  # pull the latest kernel
-wsl --set-default-version 2
-# Arch isn't in the Store; use ArchWSL: https://github.com/yuk7/ArchWSL
+```bash
+# Snapshot + offsite via restic (scheduled by deploy/systemd/hermes-backup.timer)
+restic -r <repo> backup ~/.hermes/   # excludes WAL/-shm, see deploy/backup/
 ```
 
-If `wsl --install` is unavailable on your build, enable the features manually:
-```powershell
-dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
-dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
-```
-then install the WSL 2 kernel update MSI from Microsoft and reboot.
-
-### B.2 Tune the VM — required
-
-Create `C:\Users\<you>\.wslconfig`:
-
-```ini
-[wsl2]
-memory=20GB          # leave ~12 GB for Windows on a 32 GB laptop
-processors=6
-swap=8GB
-localhostForwarding=true
-# nestedVirtualization=true   # only if you need it
-```
-
-Then `wsl --shutdown` and reopen. Without this, the VM grabs ~50% of host RAM and Windows fights Postgres/Redis for pages.
-
-### B.3 Enable systemd
-
-In the distro, edit `/etc/wsl.conf`:
-
-```ini
-[boot]
-systemd=true
-```
-
-`wsl --shutdown`, reopen. Needed if you use the systemd user-unit path.
-
-### B.4 Docker
-
-Two options:
-
-- **Docker Desktop for Windows** with WSL integration enabled — easiest. On Windows 10 it needs a recent build; check Docker Desktop's release notes for the current minimum.
-- **Native `docker` inside the distro** — `sudo pacman -S docker && sudo systemctl enable --now docker`. Requires the systemd step above. Lighter; preferred if you don't already use Docker Desktop.
-
-### B.4a GPU passthrough (NVIDIA only)
-
-If the laptop has an NVIDIA GPU and you want local inference inside WSL:
-
-1. Install the latest **Windows** NVIDIA driver (it ships the WSL CUDA shim).
-2. Inside the distro, install CUDA *userspace* libs only — never the Linux kernel driver:
-   ```bash
-   sudo pacman -S cuda
-   ```
-3. For containerized GPU use: `sudo pacman -S nvidia-container-toolkit` and add `--gpus all` (or the compose equivalent) to the inference service.
-4. Verify: `nvidia-smi` inside the distro should list the GPU.
-
-AMD GPUs: skip — ROCm in WSL is not viable today. Use Claude API on that machine.
-
-### B.5 Filesystem location — required
-
-Keep the repo under the Linux home (`~/Apps/Auto-Agent`), **not** `/mnt/c/...`. Postgres on `/mnt/c` is 10–50× slower and breaks file locking.
-
-### B.6 Networking
-
-`localhost:8000` from Windows reaches the WSL VM on current builds. Inside compose, bind services to `0.0.0.0`, not `127.0.0.1`, so Windows-side tools (browser, Claude Code on Windows if you use it that way) can reach them.
-
-### B.7 Claude Code
-
-Run Claude Code **inside the WSL distro**, not on Windows, so paths and shell commands match what the containers see.
-
-### Summary of WSL-only steps
-
-| Step                 | Arch bare-metal | WSL 2                          |
-| -------------------- | --------------- | ------------------------------ |
-| Install OS           | normal install  | `wsl --install` + ArchWSL      |
-| RAM/CPU limits       | N/A             | `.wslconfig` required          |
-| Enable systemd       | default         | `/etc/wsl.conf` `systemd=true` |
-| Docker               | `pacman -S`     | Desktop *or* in-distro         |
-| Repo location        | anywhere        | must be on ext4, not `/mnt/c`  |
-| Claude Code location | host            | inside the distro              |
-
-Everything else (compose, env, Hermes, OpenClaw, capability server) is identical.
+Use `litestream` for continuous replication if you want point-in-time recovery.
+Verify restores periodically — an untested backup is not a backup.
 
 ---
 
 ## Components
 
-### Hermes Agent
-Core agent, Claude API for inference, Postgres for long-term memory, Redis for cache.
+### Hermes Agent (brain)
+Autonomous agent. Claude API inference with built-in prompt caching, SQLite/FTS5
+persistent memory, 40+ tools, MCP, agentskills.io-compatible skills. Pinned to
+`v0.14.0`. Runs sandboxed as the `agent` user.
 
-### OpenClaw
-Telegram + Discord bridge. Reads bot tokens from `.env`. Forwards messages to Hermes and posts replies back.
+### OpenClaw (front door)
+Messaging gateway. Telegram + Discord adapters (extensible to Signal/Matrix/Slack).
+Routes inbound messages to Hermes as an external agent runtime and posts replies
+back. Sender allowlists + group mention rules enforced in `openclaw.json`.
 
-### Capability Server (FastAPI)
-Linux automation surface. Initial endpoints:
-- `POST /shell` — sandboxed command execution
-- `POST /notify` — desktop notification via `notify-send` (Arch) / Windows toast bridge (WSL, optional)
-- `POST /systemd` — start/stop/status of user units
+### Local LLM (optional)
+Ollama or llama.cpp exposing an OpenAI-compatible endpoint. Hermes routes cheap
+tasks here via config; hard tasks still go to Claude. Off by default.
 
-### Postgres / Redis
-Standard images, volumes persisted under `./data/`.
+### Capability surface
+Hermes's own tools *are* the host surface — hardened via the sandboxed systemd
+unit + bubblewrap shell jail + command allowlist. (No separate FastAPI capability
+server in v1; see [PLAN.md](PLAN.md) for why and when one would be added.)
 
-## Implementation Phases
+---
 
-1. **Infra** — compose file, `.env.example`, volumes, healthchecks
-2. **Hermes** — container + Claude API wiring + memory schema
-3. **Capability server** — FastAPI scaffold + Linux endpoints
-4. **OpenClaw** — Telegram + Discord adapters
-5. **Claude Code workflow** — `CLAUDE.md`, slash commands, hooks for the repo
-6. **Hardening** — resource limits, restart policies, log rotation, backup of Postgres volume
+## Security model (summary)
+
+- **Least privilege**: dedicated unprivileged `agent` user; empty capability set.
+- **Sandboxing**: systemd hardening directives + bubblewrap for shell tools.
+- **Network**: default-deny firewall; all UIs/endpoints loopback-only.
+- **Secrets**: `.env` at `0600`, loaded via systemd `EnvironmentFile`; never committed.
+- **Allowlists**: OpenClaw sender/chat allowlist + group mention requirement.
+- **Pinned versions**: Hermes and OpenClaw pinned; upgrades are deliberate.
+- **Audit**: journald logs per service; review `journalctl --user -u hermes`.
+
+Full threat model and phased hardening checklist: [PLAN.md](PLAN.md).
 
 ## Getting Started (TL;DR)
 
 ```bash
-git clone <repo> && cd Auto-Agent
-cp .env.example .env && $EDITOR .env
-docker compose up -d
-claude                       # in the repo root
+git clone <repo> && cd Auto-Agent && cp .env.example .env && $EDITOR .env && chmod 600 .env
+sudo -iu agent     # run the runtime as the service user
+#   install Hermes (pinned) + OpenClaw, configure OpenClaw→Hermes, enable systemd units
+claude             # as yourself, in the repo root
 ```
-
-WSL 2 users: do the `.wslconfig` + `wsl.conf` + ext4 steps first.
 
 ## License
 

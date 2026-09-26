@@ -11,7 +11,7 @@ the one file you write.
 - Everyday cat needs: toys, litter and litter boxes, feeding and water, food
   storage, furniture (trees, scratchers, beds), grooming, travel.
 - New product launches and products gaining attention.
-- Seasonal topics for the next 4 to 8 weeks, from today's date.
+- Seasonal topics for the next 3 months, from today's date.
 - The audience is cat owners in Canada. Prefer products sold in Canada and
   Canadian retailers. Skip anything only sold outside Canada.
 
@@ -19,8 +19,8 @@ the one file you write.
 
 Every slug in `~/jobs/topic-scout-seen.txt` is already covered or was already
 suggested in an earlier week. Never suggest one of them, and never suggest the
-same topic under another slug (a new slug for cat trees, carriers, or
-scratchers is still a repeat). Find new ground.
+same topic under another slug (a new slug for cat water fountains is still
+a repeat). Find new ground.
 
 ## Rules
 
@@ -34,7 +34,7 @@ scratchers is still a repeat). Find new ground.
    `web_search` result during this run. Never write a URL from memory. Never
    guess one.
 4. Competitors are the pages that rank for the idea's main keyword: run a
-   search for that keyword and take the 3 to 5 most relevant results that are
+   search for that keyword and take the 4 or 5 most relevant results that are
    articles, guides, or reviews. A competitor is never a shop page: no
    retailer or brand product pages, category pages, or "shop" listings. A URL
    whose path holds /shop/, /b/, /product/, /products/, /collections/,
@@ -42,8 +42,10 @@ scratchers is still a repeat). Find new ground.
    page (for example chewy.com/b/..., petsmart.ca/cat/..., kittylove.store). Skip
    forums, social media, and video sites too. When a Canadian page (.ca, or a
    Canadian edition) ranks, prefer it.
-5. An idea with fewer than 3 competitor URLs is left out of the idea list
-   completely. Do not write it with a note in place of URLs. List it under
+5. Research each idea until it has 4 or 5 distinct competitor URLs, none of
+   them already in FILE, so that a later check can remove a duplicate or dead
+   one without losing the idea. An idea with fewer than 3 is left out of the
+   idea list completely. Do not write it with a note in place of URLs. List it under
    Notes as "Left out: working title (N competitors found)".
 6. Mark `YMYL: yes` for any idea touching illness, symptoms, medication,
    supplements, diet, nutrition, treats, anything toxic or poisonous a cat
@@ -62,14 +64,13 @@ scratchers is still a repeat). Find new ground.
 10. Within one idea, never list the same URL twice. For product availability
     sources, prefer Canadian retailers (.ca sites).
 11. Timely first. At least 60% of ideas (6 of 10) must be `Timely: yes`: tied
-    to a named event or season in the next 4 to 8 weeks, or to a product
-    launch, recall, study, or news item from the last 90 days that a search in
-    this run found. A `Timely: yes` idea lists that dated page under Sources,
-    ending with "(published YYYY-MM-DD)", the date as the page or search
-    result shows it, in full YYYY-MM-DD form. The date must be before today
-    and no more than 90 days old. Today's date is the day you searched, not
-    a publication date, so it never counts. If no full date is shown, or it
-    is outside that window, the idea is `Timely: no`. Never guess a date.
+    to a named event or season that falls within the next 3 months from
+    today (for example Canadian Thanksgiving, Halloween, Remembrance Day,
+    Canadian winter, Black Friday, Christmas), named in "Why now" with its
+    date or month. Use Canadian dates
+    (Canadian Thanksgiving is in October). No publication date is needed: the
+    search results do not show one, so never write one. An idea that is not
+    tied to such an event or season is `Timely: no`.
 
 ## Idea fields
 
@@ -82,7 +83,7 @@ scratchers is still a repeat). Find new ground.
   type, main keyword first.
 - **Timely:** `yes` or `no`, as rule 11 defines.
 - **Why now:** one or two sentences on why this idea is timely, naming the
-  event, season, or dated item for a `Timely: yes` idea.
+  event or season and its date or month for a `Timely: yes` idea.
 
 ## How to work
 
@@ -105,11 +106,22 @@ than one idea per command.
 printf '# Topic scout DATE\n' > FILE
 : > LEFT
 cat ~/jobs/topic-scout-seen.txt
+for d in 8 9 10 11 12 13 14; do LC_ALL=C date -d "$(date +%Y)-10-$d" '+%A %B %-d %Y'; done | grep '^Monday' | sed 's/^/Canadian Thanksgiving: /'
 ```
 
-   Read the seen list it prints. Those topics are taken.
+   Read the seen list it prints. Those topics are taken. The last line is
+   this year's Canadian Thanksgiving: copy that date, never work one out.
 
-2. Pick one idea. Run a new `web_search` for its own main keyword, and any
+2. Pick one idea and give it a slug. Before searching, check that it is new
+   ground, with the slug in place of the-slug:
+
+```bash
+bash ~/jobs/add-idea.sh --check the-slug
+```
+
+   If it prints TAKEN, the topic is already covered: pick a different topic
+   (not another slug for the same one) and check again. Only when it prints
+   OK, run a new `web_search` for its own main keyword, and any
    other searches that idea needs. Every idea gets its own search. Never take
    an idea's competitors from another idea's search, and never use a
    competitor URL that is already in FILE.
@@ -125,29 +137,30 @@ echo 'Left out: working title (N competitors found)' >> LEFT
    - If it is a `roundup`, first count the roundups already in FILE with
      `grep -c '^- Type: roundup' FILE`. At 3, make it a `guide` or `how-to`
      if that fits, or leave it out.
-   - Check that each candidate competitor URL is alive, in one command, with
-     the URLs pasted in place of URL1 and so on (up to 5):
+   - Check each candidate competitor URL, in one command, with the URLs
+     pasted in place of URL1 and so on (up to 5). Each line prints the HTTP
+     code, how many times the URL is already in FILE, and the URL:
 
 ```bash
 for u in URL1 URL2 URL3 URL4 URL5; do
-  echo "$(curl -sIL -o /dev/null -w '%{http_code}' --max-time 15 "$u") $u"
+  echo "$(curl -sIL -o /dev/null -w '%{http_code}' --max-time 15 "$u") in-file:$(grep -cF -- "$u" FILE) $u"
   sleep 1
 done
 ```
 
-     Drop every URL that prints 404, 410 or 000: the page is gone. Keep 200
+     Drop every URL that prints 404, 410 or 000: the page is gone. Drop every
+     URL whose in-file count is not 0: another idea already uses it. Keep 200
      to 399, and keep 401, 402, 403 and 429, which mean the site blocks
-     scripts but the page exists. If fewer than 3 competitors remain, the
-     idea goes to LEFT like any other short idea.
+     scripts but the page exists. If fewer than 4 remain, search for more.
+     If you cannot reach 3, the idea goes to LEFT like any other short idea.
 
-4. Append the finished idea to FILE now, in one command, copying every URL
-   character for character from the search results you just read. N is one
-   more than `grep -c '^## [0-9]' FILE`.
+4. Add the finished idea to FILE now, in one command, copying every URL
+   character for character from the search results you just read. Write the
+   heading without a number: the script numbers it and appends it.
 
 ```bash
-cat >> FILE <<'IDEA'
-
-## N. Working title
+bash ~/jobs/add-idea.sh <<'IDEA'
+## Working title
 
 - Slug: `the-slug`
 - Type: guide
@@ -162,14 +175,18 @@ cat >> FILE <<'IDEA'
   - https://example.ca/first-ranking-page
   - https://example.com/second-ranking-page
   - https://example.ca/third-ranking-page
+  - https://example.com/fourth-ranking-page
 - Sources:
-  - https://example.ca/source-page (what it shows) (published 2026-09-01)
+  - https://example.ca/source-page (what it shows)
 IDEA
 ```
 
 5. Repeat steps 2 to 4 until FILE holds 10 ideas, or you run out of good
-   ideas. Never pad. Ideas numbered with gaps after a later deletion are
-   fine. Aim for timely ideas first: `grep -c '^- Timely: yes' FILE` shows how
+   ideas. Never pad. If the script prints TAKEN, nothing was added: go back
+   to step 2 with a different topic. If it prints REJECTED, nothing was
+   added: fix what it names (the type, or the month in "Why now") only if
+   the fix is true of the idea, otherwise drop the idea. Never edit a
+   heading or renumber FILE. Aim for timely ideas first: `grep -c '^- Timely: yes' FILE` shows how
    many you have.
 
 6. Stop here. A separate session checks and finishes FILE. Run this command

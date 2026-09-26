@@ -237,8 +237,8 @@ Each idea carries a slug, a type (`review`, `roundup`, `guide` or `how-to`),
 3 to 6 suggested keywords (for SEO-LLM's `suggested.txt`), 3 to 5 competitor
 URLs (for `competitors.txt`), a line on why now, a YMYL flag, and its sources.
 The keyword-tool CSV exports that SEO-LLM also wants are still yours to pull.
-When an idea becomes an SEO-LLM page, add its slug to the prompt's "Already
-covered" list.
+When an idea becomes an SEO-LLM page, add its slug to
+`jobs/topic-scout-seen.txt`.
 
 ### 1. Copy the prompt and the seen list into the VM
 
@@ -247,12 +247,24 @@ With the VM running:
 ```bash
 # Runs in: local terminal, host, in this repo. Safe to re-run: it overwrites the VM copies.
 ssh -p 22220 hermes@localhost 'mkdir -p ~/jobs ~/scout'
-scp -P 22220 jobs/topic-scout.md jobs/topic-scout-sweep.md jobs/topic-scout-seen.txt hermes@localhost:jobs/
+scp -P 22220 jobs/topic-scout.md jobs/topic-scout-sweep.md jobs/topic-scout-seen.txt jobs/add-idea.sh hermes@localhost:jobs/
 ```
 
 `jobs/topic-scout-seen.txt` lists every slug already in SEO-LLM or already
 suggested, so each run has to find new topics. The repo copy is the durable
-one: step 5 adds to it, and this step copies it in before every run.
+one: step 5 adds to it, and this step copies it in before every run. Add
+only reviewed runs. Tuning runs made on one day for one window exhausted
+that window's topics (run 17 found 4 ideas in 40 minutes), so their
+unreviewed suggestions live in `jobs/topic-scout-seen-archive.txt`, which
+nothing reads.
+
+`jobs/add-idea.sh` is the only way the research session adds an idea. It
+prints TAKEN for a slug that is on the seen list, already in the file, or
+repeats a seen topic (the word rules are in step 4). It prints REJECTED for a
+"Best ..." title not typed `roundup`, a fourth roundup, or a `Timely: yes`
+idea whose "Why now" names no month from now to 3 months ahead. It numbers
+the heading itself. Its word rules are the same as the field check's in step
+4, so keep the two identical.
 
 ### 2. Run it
 
@@ -312,23 +324,31 @@ This prints one `FAIL` line per problem and exits non-zero, or prints `PASS`.
 It checks slug format, type, the YMYL and Timely lines, keyword and competitor
 counts, that every competitor line is a URL, not a shop page, and not used by
 another idea (or twice in one), at most 3 roundups, at least 60% timely ideas
-each with a source dated in the 90 days before the run, the idea count against the summary, slugs on the
-seen list (`jobs/topic-scout-seen.txt`), and Amazon URLs. It also prints a
+(tied to a named event or season, which you judge from "Why now"), the idea count against the summary, slugs on the
+seen list (`jobs/topic-scout-seen.txt`), "Best ..." titles typed anything but
+`roundup` (run 16 relabelled 8 of 10), and Amazon URLs. It also prints a
 `WARN` (without failing) when an idea marked `YMYL: no` mentions a health,
-food, toxin, vet or weight word, when a "Best ..." title is typed `guide` or
-`how-to`, or when a slug shares two topic words with a seen slug, because all
-three are judgment calls. The check can confirm a date is written, not that
-it is true, so spot-check the dates of timely ideas.
+food, toxin, vet or weight word, or when a slug repeats a seen topic by the
+same word rules as `add-idea.sh` (plurals count as the same word, and a slug
+with one topic word matches on that word), because both are judgment calls.
+The search results carry no publication dates, so timeliness is event-based:
+check that each timely idea's event and date are right (for example,
+Canadian Thanksgiving is the second Monday of October).
 
 ```bash
 # Runs in: local terminal, host, in this repo.
 F=out/scout/topic-scout-2026-09-25.md   # EDIT: the file you pulled
 SEEN=jobs/topic-scout-seen.txt
-RUN=$(sed -n '1s/^# Topic scout //p' "$F"); CUT=$(date -d "$RUN - 90 days" +%F); echo "run $RUN, timely window $CUT to the day before"
-awk -v run="$RUN" -v cut="$CUT" '
+awk '
+  function sing(w) {
+    if (w ~ /ies$/) return substr(w, 1, length(w) - 3) "y"
+    if (w ~ /(ss|x|ch|sh)es$/) return substr(w, 1, length(w) - 2)
+    if (w ~ /[^s]s$/) return substr(w, 1, length(w) - 1)
+    return w
+  }
   function sigwords(s,   w, k, i, out) {
     k = split(s, w, "-"); out = ""
-    for (i = 1; i <= k; i++) if (w[i] !~ /^(best|how|to|choose|cat|cats|canada|for|the|in|your|and|a|of|guide|2026)$/) out = out " " w[i]
+    for (i = 1; i <= k; i++) if (w[i] !~ /^(best|how|to|choose|cat|cats|canada|for|the|in|your|and|a|of|guide|2026|keep|safe|with|vs|on|at|from|during|is|can|do|my|you)$/) out = out " " sing(w[i])
     return out
   }
   function overlap(a, b,   wa, wb, i, j, na, nb, c) {
@@ -336,28 +356,28 @@ awk -v run="$RUN" -v cut="$CUT" '
     for (i = 1; i <= na; i++) for (j = 1; j <= nb; j++) if (wa[i] == wb[j]) { c++; break }
     return c
   }
-  function done_idea(   s) {
+  function done_idea(   s, mine, need, tmp) {
     if (!n) return
     if (slug !~ /^[a-z0-9][a-z0-9-]*$/)            bad("slug " slug " is not lowercase-hyphen")
     if (slug in seen)                              bad("slug " slug " is on the seen list")
-    else for (s in seen) if (overlap(sigwords(slug), seenw[s]) >= 2) { printf "WARN idea %s: slug %s looks like seen slug %s. Same topic?\n", hn, slug, s; break }
+    else { mine = sigwords(slug); need = (split(mine, tmp, " ") >= 2) ? 2 : 1
+           for (s in seen) if (overlap(mine, seenw[s]) >= need) { printf "WARN idea %s: slug %s looks like seen slug %s. Same topic?\n", hn, slug, s; break } }
     if (timely !~ /^(yes|no)$/)                    bad("Timely line missing or not yes/no")
-    if (timely == "yes" && dated)                  timelies++
-    if (timely == "yes" && !dated)                 bad("Timely: yes but no source dated inside the window (published YYYY-MM-DD, before the run date, at most 90 days old)")
+    if (timely == "yes")                           timelies++
     if (type !~ /^(review|roundup|guide|how-to)$/) bad("type \"" type "\" is not review, roundup, guide or how-to")
     if (ymyl !~ /^(yes|no)$/)                      bad("YMYL line missing or not yes/no")
     if (kw < 3 || kw > 6)                          bad(kw " suggested keywords, expected 3 to 6")
     if (comp < 3 || comp > 5)                      bad(comp " competitors, expected 3 to 5")
     if (ymyl == "no" && tolower(words) ~ /health|treat|diet|nutrition|toxic|poison|plant|veterinar|dental|teeth|overweight|obes|weight loss|medic|sick|illness|symptom|supplement/)
       printf "WARN idea %s: YMYL is no, but the title, slug or keywords mention a YMYL word. Check it.\n", hn
-    if (type ~ /^(guide|how-to)$/ && title ~ /^## [0-9]+\. Best / && tolower(title) !~ / types/)
-      printf "WARN idea %s: titled \"Best ...\" but typed %s. Is it a relabelled roundup?\n", hn, type
+    if (type != "roundup" && title ~ /^## [0-9]+\. Best / && tolower(title) !~ / types/)
+      bad("titled \"Best ...\" but typed " type ". A \"Best ...\" title is a roundup")
   }
   function bad(msg) { printf "FAIL idea %s: %s\n", hn, msg; fails++ }
   FNR == NR                  { if ($0 !~ /^#/ && NF) { seen[$1] = 1; seenw[$1] = sigwords($1) } next }
   /amazon\./                 { printf "FAIL line %d: amazon URL: %s\n", NR, $0; fails++ }
   /^- Ideas: /               { declared = $3 }
-  /^## [0-9]+\. /            { done_idea(); n++; hn = $2; sub(/\.$/, "", hn); slug = type = ymyl = timely = ""; kw = comp = dated = 0; list = ""; words = title = $0; next }
+  /^## [0-9]+\. /            { done_idea(); n++; hn = $2; sub(/\.$/, "", hn); slug = type = ymyl = timely = ""; kw = comp = 0; list = ""; words = title = $0; next }
   /^- Slug: /                { slug = $3; gsub(/`/, "", slug); words = words " " slug; list = ""; next }
   /^- Type: /                { type = $3; if (type == "roundup") roundups++; list = ""; next }
   /^- YMYL: /                { ymyl = $3; list = ""; next }
@@ -367,7 +387,6 @@ awk -v run="$RUN" -v cut="$CUT" '
   /^- Competitors:/          { list = "comp"; next }
   /^- /                      { list = ""; next }
   /^  - / && list == "kw"    { kw++; words = words " " $0 }
-  /^  - / && list == "src" && match($0, /\(published [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]\)/) { ds = substr($0, RSTART + 11, 10); if (ds >= cut && ds < run) dated = 1 }
   /^  - / && list == "comp"  { comp++; if ($2 !~ /^https?:\/\//) bad("competitor line is not a URL: " $0)
                                if ($2 ~ /^https?:\/\/[^\/]+\.store(\/|$)|\/(shop|b|product|products|collections|pet-supplies|category)\//) bad("competitor is a shop page: " $2)
                                if ($2 ~ /^https?:/ && ($2 in used)) bad("competitor already used by idea " used[$2] ": " $2); else used[$2] = hn }
@@ -377,7 +396,7 @@ awk -v run="$RUN" -v cut="$CUT" '
     if (n > 10)             { printf "FAIL: %d ideas, expected 10 or fewer\n", n; fails++ }
     if (roundups > 3)       { printf "FAIL: %d roundup ideas, expected 3 or fewer\n", roundups; fails++ }
     need = int((n * 6 + 9) / 10)
-    if (timelies < need)    { printf "FAIL: %d timely ideas with an in-window date, expected at least %d (60%% of %d)\n", timelies, need, n; fails++ }
+    if (timelies < need)    { printf "FAIL: %d timely ideas, expected at least %d (60%% of %d)\n", timelies, need, n; fails++ }
     if (declared != n)      { printf "FAIL: header says %s ideas, file has %d\n", declared, n; fails++ }
     if (fails) { printf "%d check(s) failed\n", fails; exit 1 }
     printf "PASS: %d ideas, all fields in shape\n", n

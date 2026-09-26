@@ -20,11 +20,11 @@ and LEFT only with those commands.
 - Rule 5: every idea needs 3 to 5 competitor URLs. One with fewer is deleted
   and listed in LEFT.
 - Rule 9: at most 3 `roundup` ideas.
-- Rule 11: each `Timely: yes` idea lists a source ending "(published
-  YYYY-MM-DD)" with a date before today and no more than 90 days old. A date
-  of today, a date older than 90 days, or a partial date ("2026", "2026-08")
-  does not count. If fewer than 60% of ideas are timely, the file says so in
-  its Notes. No idea is deleted for that.
+- Rule 11: at least 60% of ideas are `Timely: yes` (tied to a named event or
+  season, stated in "Why now"). If fewer are, the file says so in its Notes.
+  No idea is deleted for that.
+- An idea whose slug is already on the seen list (`~/jobs/topic-scout-seen.txt`)
+  is deleted and listed in LEFT.
 - A competitor URL appears in one idea only, and a dead one (404, 410, or no
   answer) is removed.
 
@@ -38,7 +38,7 @@ ls -l FILE LEFT
 grep -c '^## [0-9]' FILE
 ```
 
-2. Sweep the whole file before finishing. Run these six checks, in
+2. Sweep the whole file before finishing. Run these seven checks, in
    this order, and act on what they print.
 
    a. Competitor URLs used more than once. For each URL printed, keep it in
@@ -101,27 +101,32 @@ awk '/^## [0-9]+\. /{n=$2; sub(/\.$/,"",n)} /^- Type: roundup/{r++; print "round
 echo 'Left out: working title (over the 3-roundup cap)' >> LEFT
 ```
 
-   f. Timely. The command prints each idea's Timely value and whether it has
-      a dated source inside the window (before today, at most 90 days old,
-      the command works this out). Set any `Timely: yes` idea without one to
-      `no` with the command after it. Never delete an idea for being
-      untimely. If fewer than 60% of ideas are `Timely: yes` when the sweep
-      is done, add one line to LEFT saying so (the last command below), so
-      the Notes show the shortfall.
+   f. Timely. The command prints how many ideas are `Timely: yes`. If that is
+      under 60% of the ideas, add the line it prints to LEFT with the second
+      command, so the Notes show the shortfall. Never delete or change an idea
+      for being untimely.
 
 ```bash
-awk -v today="$(date +%F)" -v cut="$(date -d '90 days ago' +%F)" '/^## [0-9]+\. /{if (n != "") print "idea " n ": timely " t ", dated " (d ? "yes" : "no"); n = $2; sub(/\.$/, "", n); t = "no"; d = 0} /^- Timely: yes/{t = "yes"} match($0, /\(published [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]\)/){ds = substr($0, RSTART + 11, 10); if (ds >= cut && ds < today) d = 1} END{if (n != "") print "idea " n ": timely " t ", dated " (d ? "yes" : "no")}' FILE
-```
-
-```bash
-awk -v n='N' '/^## [0-9]+\. /{cur = $2} cur == n "." && /^- Timely: yes/{$0 = "- Timely: no"} 1' FILE > FILE.tmp && mv FILE.tmp FILE
+echo "Timely: $(grep -c '^- Timely: yes' FILE) of $(grep -c '^## [0-9]' FILE)"
 ```
 
 ```bash
 echo "Timely: $(grep -c '^- Timely: yes' FILE) of $(grep -c '^## [0-9]' FILE), below 60%" >> LEFT
 ```
 
-   Run a to f again until none of them finds anything to fix.
+   g. Seen slugs. The command prints every idea whose slug is on the seen
+      list. Delete each one with the delete command from d, and add it to
+      LEFT:
+
+```bash
+awk 'FNR == NR {if ($0 !~ /^#/ && NF) s[$1] = 1; next} /^## [0-9]+\. /{n = $2; sub(/\.$/, "", n)} /^- Slug: /{g = $3; gsub(/`/, "", g); if (g in s) print "idea " n ": " g}' ~/jobs/topic-scout-seen.txt FILE
+```
+
+```bash
+echo 'Left out: working title (already on the seen list)' >> LEFT
+```
+
+   Run a to g again until none of them finds anything to fix.
 
 3. Append the summary. IDEAS is `grep -c '^## [0-9]' FILE`:
 

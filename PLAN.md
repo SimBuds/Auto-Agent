@@ -2,8 +2,9 @@
 
 A plan for running [Hermes Agent](https://github.com/NousResearch/hermes-agent)
 (Nous Research) on this workstation, against the Local-LLM router, inside a
-QEMU virtual machine. Written 2026-09-25. **Status: proposal. Nothing is
-installed yet.**
+QEMU virtual machine. Written 2026-09-25. **Status: installed and verified
+2026-09-25** (Hermes Agent v0.21.5, commit `5dcfd72`, on `qwen`). No jobs are
+scheduled yet.
 
 Hermes is an agent that runs on a schedule or on demand, keeps memory between
 sessions, writes reusable "skills" from work that succeeded, and can report
@@ -90,6 +91,11 @@ seen behaving on `qwen`.
   router. On 2026-09-25 that was the router (8080), CUPS (631), and several
   ports held by VS Code. The router-only network variant at the end of the setup
   guide closes that, at the cost of internet access.
+- **Hermes runs commands without asking.** With the terminal backend on
+  `local`, a terminal tool call runs in the VM with no approval prompt
+  (observed 2026-09-25 on `uname -r`). The VM and its snapshots are the only
+  boundary. Before any scheduled job is set up, decide what that job may run
+  unattended, and keep a fresh snapshot to roll back to.
 
 ---
 
@@ -122,28 +128,41 @@ lower absolute scores expected here.
   10 minutes.
 - **What would keep a model loaded all day:** any job that calls the model more
   often than every 10 minutes, or background work Hermes does on its own
-  (memory upkeep, summaries, skill-writing). Whether Hermes has such background
-  calls is not known yet. Check with `llm status` after it has been idle for 10
-  minutes. It should say `sleeping`.
+  (memory upkeep, summaries, skill-writing). Measured 2026-09-25: with Hermes
+  open and idle, the router log held no requests and `qwen` slept exactly 10
+  minutes after the last one (VRAM 6,240 to 264 MiB). Hermes's auxiliary calls
+  (such as the session title) fire right after a turn, not while idle. A
+  scheduled job or gateway may behave differently, so re-check when one is
+  added.
 - **Wake-up cost:** `lite` answers in about 1 to 2 seconds after sleeping
-  (measured). `gemma` and `qwen` wake times were not measured, but cold loads
-  took about 7 and 13 seconds on build 11022, so expect roughly that on the
-  first request after a quiet spell.
-- **Thinking.** A request that does not set `enable_thinking` gets the chat
-  template's default, and `gemma` was observed thinking by default. Check what
-  Hermes sends: thinking makes every reply slower than the leaderboard's
-  thinking-off numbers.
+  (measured). A cold `qwen` load took 12 seconds on 2026-09-25 (measured).
+  `gemma` took about 7 seconds cold on build 11022.
+- **Session start cost:** the first request of every Hermes session carries
+  its whole system prompt and tool definitions, about 15.6K tokens, which
+  `qwen` reads in about 14.5 seconds (1,075 tokens per second, measured twice).
+  Later turns reuse the router's cached prefix: the tool-result turn sent 82
+  new tokens and took 0.47 seconds. Generation ran at 64 to 66 tokens per
+  second.
+- **Thinking is on.** Hermes's `agent.reasoning_effort` defaults to `medium`,
+  and `qwen` showed a Reasoning block before every answer on 2026-09-25. That
+  makes replies slower than Local-LLM's thinking-off leaderboard numbers. On
+  one-line answers it cost only a few dozen tokens. Its cost on long jobs is not
+  measured yet.
 
 ### Memory and CPU budget (31 GiB RAM, 24 threads)
 
 - `qwen` runs its expert layers on the CPU with `load-mode = none`, so most of
-  its 20.2 GiB GGUF sits in host RAM while it is loaded. Whether sleeping frees
-  that RAM as well as the VRAM has not been measured.
+  its 20.2 GiB GGUF sits in host RAM while it is loaded. While sleeping, its
+  process held 1.65 GiB RSS (2026-09-25), so sleep very likely frees most of
+  that RAM too. The loaded RSS was not measured in the same session, so this is
+  not yet a before-and-after figure.
 - Give the VM **6 GB of RAM and 4 cores**. More RAM pushes the host into swap
   while `qwen` is loaded. The MoE layers use the host's CPU, so every busy VM
   core slows generation.
-- **Context is fixed at 65,536 tokens.** Hermes's own system prompt and 40-plus
-  tool definitions take a large share. An oversized request gets HTTP 400 from
+- **Context is fixed at 65,536 tokens.** Hermes's own system prompt and its 34
+  tool definitions take 15.6K of it (24%, measured 2026-09-25), which leaves
+  about 50K for the work. Trimming unused toolsets is the way to get more room
+  without touching the router. An oversized request gets HTTP 400 from
   the router rather than being truncated, and Hermes's docs say it compacts the
   conversation and retries when a request is rejected as too large. Untested
   here.
@@ -153,6 +172,25 @@ lower absolute scores expected here.
   2026-07-28 (see Local-LLM TESTING, *GPU faults*). A crash kills whatever request was in
   flight, Hermes's included. The router loads the model again on the next
   request.
+
+---
+
+## Persistence split
+
+The VM is disposable by design, so anything made by hand inside it needs a
+durable home before it can be trusted to last. This repo is that home.
+
+| Location | Survives | Lost when |
+|---|---|---|
+| This repo (tracked in git) | Everything below, and the VM's removal | Never by a VM action. It is the source for config copied into the VM. |
+| VM disk (`~/VMs`, including Hermes's own config, memory, and skills in the guest) | A normal shutdown and reboot | `--snapshot apply` rolls it back, a `--status-quo` session discards its changes at shutdown, and removing the VM deletes it |
+| VM snapshots (`clean`, `hermes-configured`) | Normal sessions and `--snapshot apply` | Deleted by name, or with the disk image when the VM is removed. Not tracked in git. |
+
+**Rule:** a change made by hand inside the VM (Hermes `config.yaml`, a job or
+schedule definition, a reviewed skill) is copied into this repo in the same
+phase that makes it. Anything still only in the VM when a snapshot is applied
+is presumed lost. The folders for these files are created by the first phase
+that codifies one.
 
 ---
 
@@ -166,12 +204,14 @@ at the router, snapshots, everyday use, removal) is in
 
 ## Open questions
 
-- Does Hermes call the model in the background while idle? README setup step 9 answers it.
-- Does sleeping free `qwen`'s host RAM as well as its VRAM?
+- Does sleeping free `qwen`'s host RAM as well as its VRAM? Very likely
+  (1.65 GiB RSS while sleeping), but the loaded RSS still needs measuring in
+  the same session.
 - How does Hermes's context compaction behave against the router's HTTP 400 on
   an oversized request?
-- What does Hermes send for `enable_thinking`, and how slow is `qwen` with
-  thinking on?
+- How much does thinking cost on a long job, compared with thinking off?
+- Answered 2026-09-25: Hermes makes no model calls while idle (see *How the
+  router serves Hermes*), and Hermes sends thinking on by default.
 
 ## Sources
 

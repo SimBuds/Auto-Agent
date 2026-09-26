@@ -1244,3 +1244,27 @@ repos, and one ended in a colon with no template after it.)
      Stack, platform, build commands, environment label sets, and domain
      rules belong here and in PLAN.md or README.md, never in the universal
      body above. -->
+
+- **Environment labels for handed commands are `local terminal, host` and
+  `inside the VM`.** Every block in the setup guide already carries one of
+  these, and a correct command run on the wrong side of the VM boundary either
+  fails or changes the host. (2026-09-25)
+- **Everything outside this repo is Casey's.** That covers `~/VMs`, the VM guest
+  and everything installed in it, any `quickemu` or `quickget` command that
+  writes, and the Local-LLM router and its config. The agent hands over those
+  commands under tier 0. Read-only host checks (`curl` to the router's
+  `/health` and `/v1/models`, `llm status`, `journalctl`, `quickemu --version`)
+  are the agent's own job. (2026-09-25)
+- **The router is Local-LLM's contract, consumed here and never changed from
+  here.** Port 8080, the model names `gemma`, `qwen`, and `lite`, and the 65,536
+  context are fixed by Local-LLM for Jobhunt and SEO-LLM as well. A need to
+  change any of them is raised as a Local-LLM change, not worked around in the
+  Hermes config. (2026-09-25)
+- **Hermes gets no outward-facing capability.** The agent does not configure
+  Hermes to publish, submit, or push, and does not set up a messaging gateway
+  (bot tokens and accounts are Casey's). Jobhunt data never goes through a
+  gateway, because Jobhunt's rule is that no resume or job data leaves this
+  hardware. (2026-09-25)
+- **A Hermes-written skill is reviewed as code before it is trusted or
+  codified.** A skill is instructions Hermes reuses without asking, so an
+  unread one is unreviewed code with the VM's full reach. (2026-09-25)

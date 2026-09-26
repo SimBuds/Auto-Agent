@@ -51,6 +51,39 @@ approves every stage by hand.
    a YMYL flag, and sources. Scheduling waits for two things: output worth
    automating, and a decision on running Hermes's gateway daemon, which is
    what runs its cron jobs, only while the VM is up.
+
+   Accepted 2026-09-26 after 18 hand runs (Phase 4). What held, and why:
+   - **Two sessions, chained with `--oneshot`.** A research session (`web`
+     and `terminal` tools) appends ideas, then a sweep session (`terminal`
+     only) checks and finishes the file. One session doing both skipped the
+     sweep after long research. Limiting each session's tools with
+     `--toolsets` cut its first prompt from 15,578 tokens to 6,913 and 5,993.
+   - **The prompt is the user message** (`--query-file`). Hermes's
+     compression drops tool results but restates the user message, so rules
+     sent that way survive it, and rules Hermes read from a file did not.
+   - **Search results fill the context, not page reads.** 13 to 17 searches
+     returned 168,000 to 259,000 characters. So each idea is written to disk
+     the moment it is researched. A run that wrote everything at the end
+     cited 13 of 24 URLs that did not exist. Run 18 had no dead URL among 41.
+   - **Keyless search returns no dates** (URL, title and description only),
+     so "timely" means tied to a named event or season in the next 3 months,
+     not a recent source.
+   - **qwen bends every rule that only the prompt states.** It relabelled 8
+     of 10 product comparisons as guides to dodge the roundup cap, resubmitted
+     a taken topic under a new slug, and guessed a holiday's date. Checks
+     after the run caught these, but only after the research time was spent.
+     What held was `jobs/add-idea.sh`, the only way to add an idea, which
+     refuses repeats, relabels and out-of-window timely claims at write time.
+     For later jobs: a rule that matters goes in a script the model has to
+     call.
+   - **The seen list takes only reviewed runs.** Tuning runs made on one day
+     for one window used up that window's topics (run 17 found 4 ideas in 40
+     minutes), and Hermes's retry guard ends a session after about 50
+     searches that make no progress.
+   - **Casey's review stays the last gate.** Run 18 passed every check (10
+     ideas, 7 timely, 0 dead URLs, 17 minutes of research and 2 of sweep),
+     yet no check can tell a real event link from a pretext, or a retailer
+     listing from an article.
 2. **Public health report for everything4cats.ca.** A daily HTTP check from the
    VM: key pages up, broken internal links, the affiliate disclosure present,
    the Article schema intact. It never goes near the Lightsail server or the
@@ -224,13 +257,18 @@ lower absolute scores expected here.
   process held 1.65 GiB RSS (2026-09-25), so sleep very likely frees most of
   that RAM too. The loaded RSS was not measured in the same session, so this is
   not yet a before-and-after figure.
+- **Loaded, during a job** (topic scout run 14, 2026-09-26): `llama-server`
+  held 19.1 GiB RSS, the host had 2.9 GiB available and 8 GB of swap in use.
+  That is pressure, not thrashing: generation held 47 to 66 tokens per
+  second. Nothing else heavy should run on the host during a Hermes job.
 - Give the VM **6 GB of RAM and 4 cores**. More RAM pushes the host into swap
   while `qwen` is loaded. The MoE layers use the host's CPU, so every busy VM
   core slows generation.
 - **Context is fixed at 65,536 tokens.** Hermes's own system prompt and its 34
   tool definitions take 15.6K of it (24%, measured 2026-09-25), which leaves
   about 50K for the work. Trimming unused toolsets is the way to get more room
-  without touching the router. An oversized request gets HTTP 400 from
+  without touching the router, and `--toolsets` does it per job: the topic
+  scout's two sessions start at 6.9K and 6.0K tokens. An oversized request gets HTTP 400 from
   the router rather than being truncated, and Hermes's docs say it compacts the
   conversation and retries when a request is rejected as too large. Untested
   here.
@@ -272,9 +310,10 @@ at the router, snapshots, everyday use, removal) is in
 
 ## Open questions
 
-- Does sleeping free `qwen`'s host RAM as well as its VRAM? Very likely
-  (1.65 GiB RSS while sleeping), but the loaded RSS still needs measuring in
-  the same session.
+- Does sleeping free `qwen`'s host RAM as well as its VRAM? Very likely:
+  1.65 GiB RSS while sleeping (2026-09-25) against 19.1 GiB loaded
+  (2026-09-26). The two were measured on different days, so a same-session
+  pair would close it.
 - How does Hermes's context compaction behave against the router's HTTP 400 on
   an oversized request?
 - How much does thinking cost on a long job, compared with thinking off?

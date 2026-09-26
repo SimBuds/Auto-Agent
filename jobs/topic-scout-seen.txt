@@ -1,0 +1,78 @@
+# Topic scout: slugs already covered or already suggested. One slug per line.
+# The scout never suggests a slug listed here, and the README field check fails on one.
+# Add a reviewed run's slugs with the command in README, Job: topic scout, step 5.
+
+# Pages already in SEO-LLM
+cat-water-fountain
+how-to-clean-cat-water-fountain
+
+# Suggested in run5 (2026-09-25)
+best-automatic-cat-feeder-holiday-travel-canada
+best-cat-tree-for-large-cats-canada
+holiday-plants-safe-toxic-cats-canada
+best-interactive-cat-toys-indoor-cats-canada
+how-to-keep-cats-warm-in-winter-without-electricity
+how-to-choose-right-cat-scratcher
+how-to-keep-cats-calm-safe-during-holidays
+heated-vs-self-warming-cat-beds-canadian-winters
+halloween-cat-safety-guide-costumes-decorations-treats
+how-to-prepare-cat-for-canadian-winter
+
+# Suggested in run6 (2026-09-26)
+best-cat-travel-carrier-canada
+how-to-keep-cats-warm-winter-indoor
+best-cat-scratching-post-types-guide
+best-cat-food-storage-containers-canada
+how-to-stop-cat-scratching-furniture
+safe-cat-halloween-costumes-canada
+best-automatic-cat-feeder-canada
+how-to-choose-self-cleaning-litter-box-multi-cat
+how-to-groom-long-haired-cats-before-winter
+how-to-choose-heated-cat-bed-canadian-winters
+
+# Suggested in run7 (2026-09-26)
+best-cat-beds-for-cold-weather
+best-cat-trees-for-large-cats
+best-self-cleaning-litter-boxes
+best-cat-food-storage-containers
+best-cat-scratchers
+best-cat-litter-compared
+best-automatic-cat-feeders-with-cameras
+how-to-choose-a-cat-tree
+how-to-manage-cat-shedding-fall-winter
+holiday-cat-safety-guide
+
+# Suggested in run8 (2026-09-26)
+best-cat-tree-for-large-cats-canada
+best-cat-scratching-posts-canada
+best-self-cleaning-litter-box-canada
+how-to-choose-airline-approved-cat-carrier-canada
+halloween-safety-guide-for-cats-canada
+best-cat-toys-for-indoor-cats-canada
+how-to-control-litter-box-odour
+how-to-travel-with-cat-canadian-winter
+how-to-build-cat-first-aid-kit-canada
+
+# Suggested in run9 (2026-09-26)
+best-cat-litter-canada-2026
+best-cat-trees-large-cats-canada
+litter-box-small-canadian-apartment-guide
+how-to-choose-cat-scratcher-guide
+keep-indoor-cat-entertained-fall-winter
+best-cat-bed-cold-canadian-winters-guide
+how-to-choose-cat-carrier-canadian-travel-guide
+how-to-choose-cat-food-storage-container-guide
+cat-grooming-tools-fall-shedding-guide
+how-to-choose-cat-sweater-winter-coat-guide
+
+# Suggested in run10 (2026-09-26)
+best-cat-litter-boxes-canada
+best-cat-trees-for-large-cats-canada
+best-cat-toys-for-indoor-cats-canada
+how-to-choose-cat-litter-for-your-cat
+how-to-choose-cat-scratching-post
+how-to-choose-cat-bed-for-your-cat
+how-to-choose-cat-carrier-travel-vet
+indoor-cat-enrichment-winter-canada
+safe-halloween-cat-costume-canada
+how-to-choose-cat-food-storage-container

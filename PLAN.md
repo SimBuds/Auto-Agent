@@ -43,6 +43,14 @@ approves every stage by hand.
    ranks about ten ideas, and writes short briefs to a file. Casey picks the
    ones worth doing and they become SEO-LLM's inputs (the page slug and
    `competitors.txt`). SEO-LLM keeps its staged pipeline and its approvals.
+   Decided 2026-09-25: the prompt lives in `jobs/topic-scout.md` and runs by
+   hand first (README, *Job: topic scout*). Search uses Hermes's keyless
+   default, which rotates across free vendor tiers, so no key is stored and
+   only public cat-product queries leave the VM. Each idea carries SEO-LLM's
+   own fields (slug, type, suggested keywords, competitor URLs) plus why now,
+   a YMYL flag, and sources. Scheduling waits for two things: output worth
+   automating, and a decision on running Hermes's gateway daemon, which is
+   what runs its cron jobs, only while the VM is up.
 2. **Public health report for everything4cats.ca.** A daily HTTP check from the
    VM: key pages up, broken internal links, the affiliate disclosure present,
    the Article schema intact. It never goes near the Lightsail server or the
@@ -61,10 +69,67 @@ approves every stage by hand.
    a one-page brief from public sources: what they do, recent news, stack, red
    flags. Casey passes the names by hand, because the VM cannot see Jobhunt's
    database. That is deliberate.
+6. **Daily news digest from public APIs.** Added 2026-09-26, to build after
+   the topic scout (#1) closes. Each day, one Markdown file of the day's
+   posts, each rated on two scales:
+   - **How big the news is**, computed from the API data (points, comments,
+     how fast they grew, and whether the story appears in more than one
+     place). A calculation, not a model's opinion.
+   - **Interest to Casey**, rated 1 to 5 by Hermes against Casey's interest
+     profile, `~/Apps/Portfolio/CASEY-INTERESTS.md` (tiers of topics plus an
+     "affects my machine" list), with a one-line reason, and related stories
+     grouped.
+
+   Sources: public, keyless APIs only. First Hacker News, through its
+   official API and Algolia's HN search API. A further source is added only
+   if it has a public API and its terms allow this use, checked before
+   building. Reddit is out (its Data API needs a registered app).
+
+   Design, from the topic scout's lessons: a script collects the candidates
+   through the APIs, so every link comes from the API and none is invented,
+   and Hermes only rates and summarizes a bounded list, so its context stays
+   small.
+
+   The profile is personal, so it lives in Portfolio next to MASTER-CASEY.md,
+   gitignored there like it, and is its single source. It is never copied
+   into this repo, and it is copied into the VM only for a digest run. That
+   run has no web tools (the script already fetched everything), so nothing
+   from the profile can leave the machine in a search query. It was drafted
+   2026-09-26 from MASTER-CASEY.md, the interests Casey named (local and
+   frontier AI, US stocks and trading, Bitcoin and Ethereum, PC gaming and
+   self-hosting hardware, Arch Linux), and what is installed on the
+   workstation. Topics start broad and Casey tunes them.
+
+   Stocks and crypto items are information, not advice. Hermes never connects
+   to a brokerage or exchange account and never trades. "Daily" needs the same
+   scheduling decision as the other jobs. Until then it is a daily hand-run.
+7. **Weekly routine that ends in a review queue.** Added 2026-09-26. One
+   weekly run, at a quiet hour, that leaves everything waiting for Casey and
+   takes no outward action. Each part runs where it belongs:
+   - **Jobhunt scan:** a weekly systemd user timer on the host runs
+     Jobhunt's own deterministic stages (ingest, discover, score) and writes
+     a "new matches" report. Hermes is not involved, because the stages are
+     already scripted and Jobhunt's database stays out of the VM. This is a
+     Jobhunt phase, planned in that repo.
+   - **Tailoring and autofill:** Casey triggers them for the matches he
+     picks, as now.
+   - **SEO-LLM ideas:** the topic scout (#1).
+   - **SEO-LLM briefs:** at most, pre-running the research-collection stage
+     for ideas Casey picked, stopping at the first approval gate. An SEO-LLM
+     phase, planned in that repo.
+   - **News:** the daily digest (#6).
+
+   Never automated, by rule rather than by limit: submitting an application
+   (the final outward-facing action is Casey's, and Jobhunt never clicks
+   Submit), approving SEO-LLM brief stages (they are its quality control),
+   and anything needing Casey's Ahrefs or Search Console logins. The router
+   holds one model at a time, so the parts run one after another, not in
+   parallel. Blocked on the same scheduling decision as the other jobs.
 
 Suggested order: start with #1, which needs no repo access, touches nothing
 outward, and feeds a pipeline already in use. Add #3 or #4 once Hermes has been
-seen behaving on `qwen`.
+seen behaving on `qwen`. #6 comes after #1 closes, and #7 once scheduling
+is decided.
 
 ---
 
@@ -93,8 +158,11 @@ seen behaving on `qwen`.
   guide closes that, at the cost of internet access.
 - **Hermes runs commands without asking.** With the terminal backend on
   `local`, a terminal tool call runs in the VM with no approval prompt
-  (observed 2026-09-25 on `uname -r`). The VM and its snapshots are the only
-  boundary. Before any scheduled job is set up, decide what that job may run
+  (observed 2026-09-25 on `uname -r`). Hermes does scan commands (its
+  scanner is called Tirith), but on 2026-09-26 it flagged two harmless
+  commands as HIGH risk and they ran anyway, "auto-approved by smart
+  approval", in a run nobody was watching. The VM and its snapshots are the
+  only boundary. Before any scheduled job is set up, decide what that job may run
   unattended, and keep a fresh snapshot to roll back to.
 
 ---

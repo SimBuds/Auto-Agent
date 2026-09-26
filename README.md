@@ -116,13 +116,18 @@ hermes config set model.base_url http://10.0.2.2:8080/v1
 hermes config set model.default qwen
 hermes config set model.api_key local
 hermes config set model.context_length 65536
+hermes config set skills.write_approval true
+hermes config set auxiliary.background_review.enabled false
 sed -n '/^model:/,/^[a-z_]*:/p' ~/.hermes/config.yaml | grep -v '^ *#' | grep -v '^ *$'
 grep -n 'local_runtime' -A2 ~/.hermes/config.yaml   # nothing, or enabled: false
+grep -n 'write_approval' ~/.hermes/config.yaml       # must show true
+grep -n -A1 'background_review:' ~/.hermes/config.yaml   # the line after must show enabled: false
 ```
 
-These five keys are the whole change from the installed `config.yaml`, and
-this block is their durable copy (see *Persistence split* in PLAN.md). They
-replace the interactive `hermes model` picker, and the result is the same.
+These seven keys are the whole change from the installed `config.yaml`, and
+this block is their durable copy (see *Persistence split* in PLAN.md). The
+five `model.*` keys replace the interactive `hermes model` picker, and the
+result is the same.
 
 | Key | Value | Why |
 |---|---|---|
@@ -131,6 +136,8 @@ replace the interactive `hermes model` picker, and the result is the same.
 | `model.default` | `qwen` | One pinned model, so Hermes never makes the router swap |
 | `model.api_key` | `local` | Placeholder. The router has no auth. |
 | `model.context_length` | `65536` | The router's fixed context, stated rather than guessed |
+| `auxiliary.background_review.enabled` | `false` | Turns off the post-run review that drafts skills and writes memory notes on its own. On 2026-09-26 it drafted a new `topic-scout` skill after four runs in a row, each a partial copy of `jobs/topic-scout.md`. `/refine` still runs a review by hand. (Hermes's example config names `skills.creation_nudge_interval` for this, but v0.21.5 does not recognize that key.) |
+| `skills.write_approval` | `true` | Skills Hermes writes, including from its post-run self-improvement review, wait in `~/.hermes/pending/skills/` until approved with `/skills pending` and `/skills approve`. On 2026-09-25 it wrote one unasked, and it was truncated mid-command. |
 
 The managed local runtime (`local_runtime` in `config.yaml`) is disabled by
 default and stays that way. The router already serves the models on the GPU,
@@ -216,3 +223,203 @@ rm -ri ~/VMs/debian-13.7.0-netinst ~/VMs/debian-13.7.0-netinst.conf
 ```
 
 Nothing on the host, in this repo, or in Local-LLM changes when the VM is removed.
+
+---
+
+## Job: topic scout
+
+Hermes researches article ideas for everything4cats and writes them in the
+shape SEO-LLM takes as input. The prompt is [`jobs/topic-scout.md`](jobs/topic-scout.md),
+and this repo holds its only durable copy. It runs by hand for now. Scheduling
+waits until the output has proven worth automating (see PLAN.md, *Good fits*).
+
+Each idea carries a slug, a type (`review`, `roundup`, `guide` or `how-to`),
+3 to 6 suggested keywords (for SEO-LLM's `suggested.txt`), 3 to 5 competitor
+URLs (for `competitors.txt`), a line on why now, a YMYL flag, and its sources.
+The keyword-tool CSV exports that SEO-LLM also wants are still yours to pull.
+When an idea becomes an SEO-LLM page, add its slug to the prompt's "Already
+covered" list.
+
+### 1. Copy the prompt and the seen list into the VM
+
+With the VM running:
+
+```bash
+# Runs in: local terminal, host, in this repo. Safe to re-run: it overwrites the VM copies.
+ssh -p 22220 hermes@localhost 'mkdir -p ~/jobs ~/scout'
+scp -P 22220 jobs/topic-scout.md jobs/topic-scout-sweep.md jobs/topic-scout-seen.txt hermes@localhost:jobs/
+```
+
+`jobs/topic-scout-seen.txt` lists every slug already in SEO-LLM or already
+suggested, so each run has to find new topics. The repo copy is the durable
+one: step 5 adds to it, and this step copies it in before every run.
+
+### 2. Run it
+
+The prompt goes in as the user message itself, with `--query-file`, not as a
+file Hermes is told to read. Hermes compresses its context when it fills,
+which happened in every run on 2026-09-25 (13 to 17 searches returned 168,000
+to 259,000 characters). Compression drops tool results but restates the user
+message. When the prompt arrived through `read_file`, two of three runs lost
+its rules and wrote an improvised file to the wrong path. `--query-file` sends
+the file verbatim, with no shell interpretation.
+
+```bash
+# Runs in: inside the VM. Two non-interactive sessions, one after the other.
+find ~/.hermes/skills -name SKILL.md | sort > ~/scout/skills-before.txt
+hermes chat --oneshot --toolsets "web,terminal" --query-file ~/jobs/topic-scout.md && \
+hermes chat --oneshot --toolsets "terminal" --query-file ~/jobs/topic-scout-sweep.md
+```
+
+The job runs as two sessions. The first researches and appends ideas. The
+second, `topic-scout-sweep.md`, starts with a fresh context, checks the file
+against the rules with fixed commands, and appends the summary. On 2026-09-26
+one session doing both ran out of room: run 11 skipped most of the finishing
+steps after 39 minutes of research. `--toolsets` limits each session to the
+tools its prompt allows, so `execute_code`, `patch` and `write_file` are not
+offered at all (run 11 used `execute_code` five times against the prompt).
+If the second session replies "FILE missing", the first one wrote nowhere,
+and there is nothing to sweep. `--oneshot` makes each session answer and exit.
+Without it, `--query-file` on a real terminal leaves the session open for a
+follow-up, and the second session only starts after Ctrl+C. `&&` starts the
+sweep only if research exited cleanly.
+
+When it exits, check whether Hermes wrote itself any new skills during the
+run:
+
+```bash
+# Runs in: inside the VM. No output means no new or removed skills.
+find ~/.hermes/skills -name SKILL.md | sort | diff ~/scout/skills-before.txt -
+```
+
+A new skill is instructions Hermes will reuse without asking, so read it
+before trusting it (AGENTS.md, *Project-specific rules*).
+
+### 3. Pull the file out
+
+```bash
+# Runs in: local terminal, host, in this repo. Safe to re-run: it overwrites local copies.
+mkdir -p out/scout
+scp -P 22220 'hermes@localhost:scout/topic-scout-*.md' out/scout/
+ls -l out/scout/
+```
+
+`out/` is gitignored. Scout files are generated output and never committed.
+
+### 4. Check the fields
+
+This prints one `FAIL` line per problem and exits non-zero, or prints `PASS`.
+It checks slug format, type, the YMYL and Timely lines, keyword and competitor
+counts, that every competitor line is a URL, not a shop page, and not used by
+another idea (or twice in one), at most 3 roundups, at least 60% timely ideas
+each with a source dated in the 90 days before the run, the idea count against the summary, slugs on the
+seen list (`jobs/topic-scout-seen.txt`), and Amazon URLs. It also prints a
+`WARN` (without failing) when an idea marked `YMYL: no` mentions a health,
+food, toxin, vet or weight word, when a "Best ..." title is typed `guide` or
+`how-to`, or when a slug shares two topic words with a seen slug, because all
+three are judgment calls. The check can confirm a date is written, not that
+it is true, so spot-check the dates of timely ideas.
+
+```bash
+# Runs in: local terminal, host, in this repo.
+F=out/scout/topic-scout-2026-09-25.md   # EDIT: the file you pulled
+SEEN=jobs/topic-scout-seen.txt
+RUN=$(sed -n '1s/^# Topic scout //p' "$F"); CUT=$(date -d "$RUN - 90 days" +%F); echo "run $RUN, timely window $CUT to the day before"
+awk -v run="$RUN" -v cut="$CUT" '
+  function sigwords(s,   w, k, i, out) {
+    k = split(s, w, "-"); out = ""
+    for (i = 1; i <= k; i++) if (w[i] !~ /^(best|how|to|choose|cat|cats|canada|for|the|in|your|and|a|of|guide|2026)$/) out = out " " w[i]
+    return out
+  }
+  function overlap(a, b,   wa, wb, i, j, na, nb, c) {
+    na = split(a, wa, " "); nb = split(b, wb, " "); c = 0
+    for (i = 1; i <= na; i++) for (j = 1; j <= nb; j++) if (wa[i] == wb[j]) { c++; break }
+    return c
+  }
+  function done_idea(   s) {
+    if (!n) return
+    if (slug !~ /^[a-z0-9][a-z0-9-]*$/)            bad("slug " slug " is not lowercase-hyphen")
+    if (slug in seen)                              bad("slug " slug " is on the seen list")
+    else for (s in seen) if (overlap(sigwords(slug), seenw[s]) >= 2) { printf "WARN idea %s: slug %s looks like seen slug %s. Same topic?\n", hn, slug, s; break }
+    if (timely !~ /^(yes|no)$/)                    bad("Timely line missing or not yes/no")
+    if (timely == "yes" && dated)                  timelies++
+    if (timely == "yes" && !dated)                 bad("Timely: yes but no source dated inside the window (published YYYY-MM-DD, before the run date, at most 90 days old)")
+    if (type !~ /^(review|roundup|guide|how-to)$/) bad("type \"" type "\" is not review, roundup, guide or how-to")
+    if (ymyl !~ /^(yes|no)$/)                      bad("YMYL line missing or not yes/no")
+    if (kw < 3 || kw > 6)                          bad(kw " suggested keywords, expected 3 to 6")
+    if (comp < 3 || comp > 5)                      bad(comp " competitors, expected 3 to 5")
+    if (ymyl == "no" && tolower(words) ~ /health|treat|diet|nutrition|toxic|poison|plant|veterinar|dental|teeth|overweight|obes|weight loss|medic|sick|illness|symptom|supplement/)
+      printf "WARN idea %s: YMYL is no, but the title, slug or keywords mention a YMYL word. Check it.\n", hn
+    if (type ~ /^(guide|how-to)$/ && title ~ /^## [0-9]+\. Best / && tolower(title) !~ / types/)
+      printf "WARN idea %s: titled \"Best ...\" but typed %s. Is it a relabelled roundup?\n", hn, type
+  }
+  function bad(msg) { printf "FAIL idea %s: %s\n", hn, msg; fails++ }
+  FNR == NR                  { if ($0 !~ /^#/ && NF) { seen[$1] = 1; seenw[$1] = sigwords($1) } next }
+  /amazon\./                 { printf "FAIL line %d: amazon URL: %s\n", NR, $0; fails++ }
+  /^- Ideas: /               { declared = $3 }
+  /^## [0-9]+\. /            { done_idea(); n++; hn = $2; sub(/\.$/, "", hn); slug = type = ymyl = timely = ""; kw = comp = dated = 0; list = ""; words = title = $0; next }
+  /^- Slug: /                { slug = $3; gsub(/`/, "", slug); words = words " " slug; list = ""; next }
+  /^- Type: /                { type = $3; if (type == "roundup") roundups++; list = ""; next }
+  /^- YMYL: /                { ymyl = $3; list = ""; next }
+  /^- Timely: /              { timely = $3; list = ""; next }
+  /^- Sources:/              { list = "src"; next }
+  /^- Suggested keywords:/   { list = "kw"; next }
+  /^- Competitors:/          { list = "comp"; next }
+  /^- /                      { list = ""; next }
+  /^  - / && list == "kw"    { kw++; words = words " " $0 }
+  /^  - / && list == "src" && match($0, /\(published [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]\)/) { ds = substr($0, RSTART + 11, 10); if (ds >= cut && ds < run) dated = 1 }
+  /^  - / && list == "comp"  { comp++; if ($2 !~ /^https?:\/\//) bad("competitor line is not a URL: " $0)
+                               if ($2 ~ /^https?:\/\/[^\/]+\.store(\/|$)|\/(shop|b|product|products|collections|pet-supplies|category)\//) bad("competitor is a shop page: " $2)
+                               if ($2 ~ /^https?:/ && ($2 in used)) bad("competitor already used by idea " used[$2] ": " $2); else used[$2] = hn }
+  END {
+    done_idea()
+    if (n == 0)             { print "FAIL: no ideas found"; fails++ }
+    if (n > 10)             { printf "FAIL: %d ideas, expected 10 or fewer\n", n; fails++ }
+    if (roundups > 3)       { printf "FAIL: %d roundup ideas, expected 3 or fewer\n", roundups; fails++ }
+    need = int((n * 6 + 9) / 10)
+    if (timelies < need)    { printf "FAIL: %d timely ideas with an in-window date, expected at least %d (60%% of %d)\n", timelies, need, n; fails++ }
+    if (declared != n)      { printf "FAIL: header says %s ideas, file has %d\n", declared, n; fails++ }
+    if (fails) { printf "%d check(s) failed\n", fails; exit 1 }
+    printf "PASS: %d ideas, all fields in shape\n", n
+  }' "$SEEN" "$F"
+echo "check exit=$?"
+```
+
+Then check that each competitor URL exists. Each line is labelled:
+
+- `OK`: the page answered (200 to 399).
+- `DEAD`: 404, 410, or no answer (`000`). The URL was probably made up, or
+  the page is gone. Drop it.
+- `UNVERIFIED`: 401, 402, 403 or 429. The site blocks scripts, and on
+  2026-09-26 catster.com, nytimes.com (Wirecutter), consumerreports.org,
+  purina.com and dailypaws.com answered 403 or 402 even for a made-up path.
+  So this code proves nothing either way. Open these in a browser before
+  using the idea.
+
+```bash
+# Runs in: local terminal, host, in this repo. One request per URL, two seconds apart.
+F=out/scout/topic-scout-2026-09-25.md   # EDIT: the file you pulled
+awk '/^- Competitors:/{c=1;next} /^- /{c=0} c && /^  - https?:/{print $2}' "$F" | while read -r url; do
+  code=$(curl -sIL -o /dev/null -w '%{http_code}' --max-time 15 "$url")
+  case "$code" in
+    2??|3??)         label=OK ;;
+    401|402|403|429) label=UNVERIFIED ;;
+    *)               label=DEAD ;;
+  esac
+  echo "$label $code $url"
+  sleep 2
+done
+```
+
+### 5. Record the run's topics as seen
+
+Once you have reviewed a run and kept or rejected its ideas, add all of its
+slugs to the seen list, so later runs do not suggest them again. Kept ideas
+are covered, and rejected ones were already considered.
+
+```bash
+# Runs in: local terminal, host, in this repo. NOT safe to run twice for the same file: it would add the slugs again.
+F=out/scout/topic-scout-2026-09-25.md   # EDIT: the file you reviewed
+{ printf '\n# Suggested in %s\n' "$(basename "$F" .md)"; sed -n 's/^- Slug: `\(.*\)`$/\1/p' "$F"; } >> jobs/topic-scout-seen.txt
+tail -n 12 jobs/topic-scout-seen.txt
+```

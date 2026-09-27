@@ -451,8 +451,9 @@ tail -n 12 jobs/topic-scout-seen.txt
 ## Job: news digest
 
 A daily digest of AI, tech and programming news, rated for interest against
-`CASEY-INTERESTS.md` (PLAN.md, Good fits #6). **Status:** step 1 (collect)
-built 2026-09-27. Rating by Hermes is the next phase.
+`CASEY-INTERESTS.md` (PLAN.md, Good fits #6). **Status:** built 2026-09-27,
+run by hand. Collect on the host (step 1), rate in the VM (steps 2 and 3),
+pull the digest (step 4).
 
 The collector runs on the host, not in the VM. It reads three public,
 keyless APIs whose terms allow this use: Hacker News through Algolia (stories
@@ -463,8 +464,8 @@ and cs.SE (20). Each item keeps its source's own numbers (points and
 comments, trending score and likes). Lobsters is not used: its robots.txt
 disallows all clients and declares `ai-input=no`.
 
-`CASEY-INTERESTS.md` is personal. It lives in this repo's root and is
-gitignored, so it is never committed.
+`CASEY-INTERESTS.md` is personal. It lives in `~/Apps/Portfolio`, next to
+`MASTER-CASEY.md`, gitignored there, and is never copied into this repo.
 
 ### 1. Collect the candidates
 
@@ -488,3 +489,59 @@ the top of the script, each with a `NEWS_*` environment override.
 
 Tests run on the host with no network, against `jobs/fixtures/news/`:
 `python3 jobs/test-news-collect.py` must end `passed=22 failed=0` and exit 0.
+
+### 2. Copy the candidates, the profile and the job into the VM
+
+`DAY` is the date in the candidates file name from step 1. The profile goes
+in only for this run: step 3 deletes it again.
+
+```bash
+# Runs in: local terminal, host, in this repo. Safe to re-run: it overwrites the VM copies.
+DAY=$(date +%F)   # EDIT if step 1 ran on another day
+ls -l "out/news/candidates-$DAY.md" ~/Apps/Portfolio/CASEY-INTERESTS.md   # both must exist
+ssh -p 22220 hermes@localhost 'mkdir -p ~/news ~/jobs'
+scp -P 22220 "out/news/candidates-$DAY.md" ~/Apps/Portfolio/CASEY-INTERESTS.md hermes@localhost:news/
+scp -P 22220 jobs/news-rate.md jobs/add-rating.sh hermes@localhost:jobs/
+```
+
+### 3. Rate them
+
+Hermes gets only the `terminal` tool, so the profile cannot end up in a web
+search. The VM's terminal can still reach the internet, so the prompt forbids
+fetching anything, and the block deletes the profile from the VM whatever
+the run's outcome. Setup step 11 (router-only network) would close that
+fully.
+
+`add-rating.sh` is the only way a rating is recorded. Each line is
+`ID | SCORE | MATCH | REASON`, and it refuses a line whose ID is not in the
+candidates or is already rated, whose score is not 1 to 5 or does not fit
+its MATCH (machine 5, tier1 5 or 4, tier2 4, tier3 3, none 2,
+not-interested 1), or whose reason is not 10 to 200 characters. A machine or
+tier rating must quote, in double quotes, a term from that MATCH's own
+section of the profile (read at run time), and tier1 at 4 must say "in
+passing". An arXiv paper takes at most 4 unless it is machine, so for papers
+tier1 is 4 without "in passing". Its tests run on the host with a made-up
+profile, never the real one: `bash jobs/test-add-rating.sh` must end
+`passed=36 failed=0`.
+
+```bash
+# Runs in: inside the VM.
+hermes chat --oneshot --toolsets "terminal" --query-file ~/jobs/news-rate.md
+bash ~/jobs/add-rating.sh --left
+bash ~/jobs/add-rating.sh --digest; echo "digest exit=$?"   # 0: all rated. 3: some unrated, listed at the end
+rm -v ~/news/CASEY-INTERESTS.md
+ls ~/news/
+```
+
+### 4. Pull the digest
+
+```bash
+# Runs in: local terminal, host, in this repo.
+DAY=$(date +%F)   # EDIT to the same DAY as step 2
+scp -P 22220 "hermes@localhost:news/digest-$DAY.md" "hermes@localhost:news/ratings-$DAY.txt" out/news/
+ls -l out/news/
+```
+
+`out/news/digest-DAY.md` lists every item by interest, highest first, with
+the MATCH, the reason and the source's own size numbers. Where a rating feels
+wrong, add a dated line to the profile's *Tuning notes*.

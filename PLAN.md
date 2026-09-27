@@ -119,7 +119,7 @@ approves every stage by hand.
      how fast they grew, and whether the story appears in more than one
      place). A calculation, not a model's opinion.
    - **Interest to Casey**, rated 1 to 5 by Hermes against Casey's interest
-     profile, `CASEY-INTERESTS.md` in this repo's root (tiers of topics plus an
+     profile, `~/Apps/Portfolio/CASEY-INTERESTS.md` (tiers of topics plus an
      "affects my machine" list), with a one-line reason, and related stories
      grouped.
 
@@ -135,12 +135,40 @@ approves every stage by hand.
 
    Design, from the topic scout's lessons: a script collects the candidates
    through the APIs, so every link comes from the API and none is invented,
-   and Hermes only rates and summarizes a bounded list, so its context stays
-   small.
+   and Hermes only rates a bounded list, so its context stays small. Every
+   rating goes through `jobs/add-rating.sh`, which holds the profile's
+   scoring section as a rule: each rating names what matched (machine,
+   tier1, tier2, tier3, none, not-interested) and its score must fit that
+   (5, 5 or 4, 4, 3, 2, 1). A script, not the model, renders the digest.
+   Items that are not tech news and match no tier count as not-interested,
+   because the profile's scale only defines 2 for tech news. "How big" is
+   the source's own numbers for now. A computed size rating and grouping
+   related stories come later. First run (2026-09-27): all 62 rated in 2
+   minutes with no line refused, but the MATCH was often wrong, because the
+   script checks that a score fits its MATCH and not that the MATCH fits the
+   item. `machine` went to agent news that touches nothing on the machine,
+   `tier1` was always scored 4 ("in passing") and never 5, and `tier3` was
+   used as a "casual AI" catch-all though the profile's Tier 3 is cats,
+   e-commerce, hosting and content pipelines. WordPress and Core Web Vitals
+   items (Tier 1) landed in tier3. So the script now checks the MATCH too: a
+   machine or tier rating quotes a term from that MATCH's own section of the
+   profile, and tier1 at 4 must say "in passing". A loose quote from inside
+   the right section (Drawgent quoting "agents", from the machine section's
+   "Agents and VMs" label) still passes. Round 2 (Casey's profile edit, 2026-09-27)
+   narrowed two broad Tier 1 phrases and added a Tier 2 bullet for agent
+   research and other models: items at 5 fell from 25 to 10 to 12 of 62,
+   run-to-run agreement from 92% to 82% as more items sat on the Tier 1 and
+   Tier 2 line. The lever that worked was the profile's wording, not the
+   script: the model follows the words it can quote. Round 3 narrowed the
+   wording again (no bare "coding agents", GGUF tied to LLMs) and capped
+   arXiv papers at 4 unless machine, after research papers took top slots
+   through broad terms.
 
-   The profile is personal. Casey chose (2026-09-27) to keep it in this
-   repo's root, gitignored, as its single source, so it is never committed.
-   It is copied into the VM only for a digest run. That
+   The profile is personal, so it lives in Portfolio next to MASTER-CASEY.md,
+   gitignored there like it, as its single source (Casey moved it there
+   2026-09-27 after a morning in this repo's root, gitignored). It is never
+   copied into this repo, and it is copied into the VM only for a digest
+   run. That
    run has no web tools (the script already fetched everything), so nothing
    from the profile can leave the machine in a search query. It was drafted
    2026-09-26 from MASTER-CASEY.md, the interests Casey named (local and

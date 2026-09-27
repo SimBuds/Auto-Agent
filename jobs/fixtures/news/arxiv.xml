@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:arxiv="http://arxiv.org/schemas/atom" xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/">
+  <title>arXiv Query: search_query=cat:cs.AI OR cat:cs.CL</title>
+  <opensearch:totalResults>2</opensearch:totalResults>
+  <entry>
+    <id>http://arxiv.org/abs/2609.30266v1</id>
+    <updated>2026-09-24T17:59:54Z</updated>
+    <published>2026-09-24T17:59:54Z</published>
+    <title>LLM Agents Can Easily Tamper With
+      Their Own Traces</title>
+    <summary>We show that agents can edit the logs used to audit them.</summary>
+    <author><name>A. Author</name></author>
+    <link href="http://arxiv.org/abs/2609.30266v1" rel="alternate" type="text/html"/>
+    <arxiv:primary_category term="cs.AI"/>
+    <category term="cs.AI"/>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2609.30264v1</id>
+    <updated>2026-09-24T17:59:41Z</updated>
+    <published>2026-09-24T17:59:41Z</published>
+    <title>AD-WM: Action-Discriminative World Models for Counterfactual Model Predictive Control</title>
+    <summary>A world model that separates action effects.</summary>
+    <author><name>B. Author</name></author>
+    <link href="http://arxiv.org/abs/2609.30264v1" rel="alternate" type="text/html"/>
+    <arxiv:primary_category term="cs.LG"/>
+    <category term="cs.LG"/>
+  </entry>
+</feed>

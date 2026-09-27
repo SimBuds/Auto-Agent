@@ -128,12 +128,23 @@ echo 'Left out: working title (already on the seen list)' >> LEFT
 
    Run a to g again until none of them finds anything to fix.
 
-3. Append the summary. IDEAS is `grep -c '^## [0-9]' FILE`:
+3. Append the summary with two commands, each run on its own. Hermes blocks
+   a grouped `{ ... }` or `if` command here, so keep them exactly this plain.
+   First the summary and the Notes heading:
 
 ```bash
-{ printf '\n## Summary\n\n- Ideas: IDEAS\n\n## Notes\n\n'
-  if [ -s LEFT ]; then cat LEFT; else echo 'None.'; fi
-} >> FILE
+IDEAS=$(grep -c '^## [0-9]' FILE) && printf '\n## Summary\n\n- Ideas: %s\n\n## Notes\n\n' "$IDEAS" >> FILE
+```
+
+   Then the notes. Run `ls -l LEFT`. If its size is 0, run the first command
+   below. Otherwise run the second:
+
+```bash
+echo 'None.' >> FILE
+```
+
+```bash
+cat LEFT >> FILE
 ```
 
 4. Run these commands and put their exact output in your reply, then stop.

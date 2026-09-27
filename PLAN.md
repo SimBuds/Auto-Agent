@@ -86,7 +86,10 @@ approves every stage by hand.
      times) and stopped at 3. The prompt now budgets 4 searches per idea, one
      idea at a time. That rule is prompt-only, but it held: runs 20 and 21,
      back to back under run 18's conditions, each reached 10 ideas in 18 to
-     20 minutes with no query repeated, no search cap and 0 dead URLs.
+     20 minutes with no query repeated, no search cap and 0 dead URLs. Runs
+     22 and 23 (2026-09-27, after the sweep's summary step was made plain and
+     step 1 began printing Black Friday) did the same with no command blocked
+     in any session: four passing runs in a row.
    - **Casey's review stays the last gate.** Run 18 passed every check (10
      ideas, 7 timely, 0 dead URLs, 17 minutes of research and 2 of sweep),
      yet no check can tell a real event link from a pretext, or a retailer
@@ -116,23 +119,28 @@ approves every stage by hand.
      how fast they grew, and whether the story appears in more than one
      place). A calculation, not a model's opinion.
    - **Interest to Casey**, rated 1 to 5 by Hermes against Casey's interest
-     profile, `~/Apps/Portfolio/CASEY-INTERESTS.md` (tiers of topics plus an
+     profile, `CASEY-INTERESTS.md` in this repo's root (tiers of topics plus an
      "affects my machine" list), with a one-line reason, and related stories
      grouped.
 
-   Sources: public, keyless APIs only. First Hacker News, through its
-   official API and Algolia's HN search API. A further source is added only
-   if it has a public API and its terms allow this use, checked before
-   building. Reddit is out (its Data API needs a registered app).
+   Sources: public, keyless APIs only, each checked before building
+   (2026-09-27): Hacker News through Algolia's search API, Hugging Face's
+   trending models, and arXiv (its API terms allow personal use at one
+   request every three seconds, and its metadata is CC0). Out: Reddit (its
+   Data API needs a registered app) and Lobsters (its robots.txt disallows
+   all clients and declares `ai-input=no`, which rating by a model is). A
+   further source is added only after the same check. The collector,
+   `jobs/news-collect.py`, runs on the host and writes a dated candidates
+   file per run, which is also the history trends will be counted from.
 
    Design, from the topic scout's lessons: a script collects the candidates
    through the APIs, so every link comes from the API and none is invented,
    and Hermes only rates and summarizes a bounded list, so its context stays
    small.
 
-   The profile is personal, so it lives in Portfolio next to MASTER-CASEY.md,
-   gitignored there like it, and is its single source. It is never copied
-   into this repo, and it is copied into the VM only for a digest run. That
+   The profile is personal. Casey chose (2026-09-27) to keep it in this
+   repo's root, gitignored, as its single source, so it is never committed.
+   It is copied into the VM only for a digest run. That
    run has no web tools (the script already fetched everything), so nothing
    from the profile can leave the machine in a search query. It was drafted
    2026-09-26 from MASTER-CASEY.md, the interests Casey named (local and

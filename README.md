@@ -261,10 +261,12 @@ nothing reads.
 `jobs/add-idea.sh` is the only way the research session adds an idea. It
 prints TAKEN for a slug that is on the seen list, already in the file, or
 repeats a seen topic (the word rules are in step 4). It prints REJECTED for a
-"Best ..." title not typed `roundup`, a fourth roundup, or a `Timely: yes`
+"Best ..." title or a `best-` slug not typed `roundup`, a fourth roundup, or a
+`Timely: yes`
 idea whose "Why now" names no month from now to 3 months ahead. It numbers
 the heading itself. Its word rules are the same as the field check's in step
-4, so keep the two identical.
+4, so keep the two identical. Its tests run on the host, never in the VM:
+`bash jobs/test-add-idea.sh` must end `passed=34 failed=0` and exit 0.
 
 ### 2. Run it
 
@@ -325,8 +327,9 @@ It checks slug format, type, the YMYL and Timely lines, keyword and competitor
 counts, that every competitor line is a URL, not a shop page, and not used by
 another idea (or twice in one), at most 3 roundups, at least 60% timely ideas
 (tied to a named event or season, which you judge from "Why now"), the idea count against the summary, slugs on the
-seen list (`jobs/topic-scout-seen.txt`), "Best ..." titles typed anything but
-`roundup` (run 16 relabelled 8 of 10), and Amazon URLs. It also prints a
+seen list (`jobs/topic-scout-seen.txt`), "Best ..." titles and `best-` slugs
+typed anything but `roundup` (run 16 relabelled 8 of 10, run 21 retitled one
+"How to Choose the Best ..."), and Amazon URLs. It also prints a
 `WARN` (without failing) when an idea marked `YMYL: no` mentions a health,
 food, toxin, vet or weight word, or when a slug repeats a seen topic by the
 same word rules as `add-idea.sh` (plurals count as the same word, and a slug
@@ -372,6 +375,8 @@ awk '
       printf "WARN idea %s: YMYL is no, but the title, slug or keywords mention a YMYL word. Check it.\n", hn
     if (type != "roundup" && title ~ /^## [0-9]+\. Best / && tolower(title) !~ / types/)
       bad("titled \"Best ...\" but typed " type ". A \"Best ...\" title is a roundup")
+    if (type != "roundup" && slug ~ /^best-/ && slug !~ /-types/)
+      bad("slug " slug " starts with best- but typed " type ". A best- slug is a roundup")
   }
   function bad(msg) { printf "FAIL idea %s: %s\n", hn, msg; fails++ }
   FNR == NR                  { if ($0 !~ /^#/ && NF) { seen[$1] = 1; seenw[$1] = sigwords($1) } next }
@@ -442,3 +447,44 @@ F=out/scout/topic-scout-2026-09-25.md   # EDIT: the file you reviewed
 { printf '\n# Suggested in %s\n' "$(basename "$F" .md)"; sed -n 's/^- Slug: `\(.*\)`$/\1/p' "$F"; } >> jobs/topic-scout-seen.txt
 tail -n 12 jobs/topic-scout-seen.txt
 ```
+
+## Job: news digest
+
+A daily digest of AI, tech and programming news, rated for interest against
+`CASEY-INTERESTS.md` (PLAN.md, Good fits #6). **Status:** step 1 (collect)
+built 2026-09-27. Rating by Hermes is the next phase.
+
+The collector runs on the host, not in the VM. It reads three public,
+keyless APIs whose terms allow this use: Hacker News through Algolia (stories
+from the last 24 hours, counted from the start of the hour so the cache can
+hit, with at least 50 points, top 40), Hugging Face's
+trending models (top 15), and arXiv's newest papers in cs.AI, cs.CL, cs.LG
+and cs.SE (20). Each item keeps its source's own numbers (points and
+comments, trending score and likes). Lobsters is not used: its robots.txt
+disallows all clients and declares `ai-input=no`.
+
+`CASEY-INTERESTS.md` is personal. It lives in this repo's root and is
+gitignored, so it is never committed.
+
+### 1. Collect the candidates
+
+The User-Agent carries a contact address, as the fetching rules require. It
+comes from `NEWS_CONTACT` at run time and is never stored in the repo. Left
+empty, the script stops before fetching anything.
+
+```bash
+# Runs in: local terminal, host, in this repo. Safe to re-run: within an hour it reads its cache and fetches nothing.
+NEWS_CONTACT=''   # EDIT: your contact address, for the User-Agent
+NEWS_CONTACT="$NEWS_CONTACT" python3 jobs/news-collect.py
+echo "collect exit=$?"   # 0: all sources read. 3: a source FAILED (named in the file). 1: NEWS_CONTACT empty
+```
+
+It writes `out/news/candidates-DATE.md` (what Hermes will rate) and
+`candidates-DATE.json` (kept, so trends can be counted later). Each request
+is logged to stderr with its time. arXiv's terms allow one request every
+three seconds, and a source that answers 429 or 5xx gets three tries with a
+growing wait before it is marked FAILED. Limits and windows are constants at
+the top of the script, each with a `NEWS_*` environment override.
+
+Tests run on the host with no network, against `jobs/fixtures/news/`:
+`python3 jobs/test-news-collect.py` must end `passed=22 failed=0` and exit 0.

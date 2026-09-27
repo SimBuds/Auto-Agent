@@ -111,10 +111,12 @@ printf '# Topic scout DATE\n' > FILE
 : > LEFT
 cat ~/jobs/topic-scout-seen.txt
 for d in 8 9 10 11 12 13 14; do LC_ALL=C date -d "$(date +%Y)-10-$d" '+%A %B %-d %Y'; done | grep '^Monday' | sed 's/^/Canadian Thanksgiving: /'
+for d in 23 24 25 26 27 28 29; do LC_ALL=C date -d "$(date +%Y)-11-$d" '+%A %B %-d %Y'; done | grep '^Friday' | sed 's/^/Black Friday: /'
 ```
 
-   Read the seen list it prints. Those topics are taken. The last line is
-   this year's Canadian Thanksgiving: copy that date, never work one out.
+   Read the seen list it prints. Those topics are taken. The last two lines
+   are this year's Canadian Thanksgiving and Black Friday: copy those dates,
+   never work one out.
 
 2. Pick one idea and give it a slug. Before searching, check that it is new
    ground, with the slug in place of the-slug:

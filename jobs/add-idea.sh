@@ -1,7 +1,9 @@
 #!/bin/bash
 # Topic scout helper, run inside the VM with bash.
 #   bash ~/jobs/add-idea.sh --check the-slug    prints OK, or TAKEN and exits 2
-#   bash ~/jobs/add-idea.sh <<'IDEA' ... IDEA   checks the idea, then appends it
+#   bash ~/jobs/add-idea.sh < ~/scout/idea.md   checks the idea, then appends it
+# (Hermes blocks a heredoc piped straight into bash in a one-shot run, so the
+# prompt writes the idea to a file first.)
 # The idea's heading is `## Title` with no number: the script numbers it, so the
 # model never edits headings (run 15 lost about 8 tool calls to `## N.` repairs).
 #
@@ -14,8 +16,10 @@
 # README field check uses the same word rules, so keep the two identical.
 #
 # REJECTED (exit 3): rules the prompt alone did not hold in run 16. A "Best ..."
-# title compares products, so it is a roundup, and a run has at most 3. A
-# Timely: yes idea names, in "Why now", a month from this month to 3 months ahead.
+# title compares products, so it is a roundup, and a run has at most 3. So is a
+# best- slug (run 21 kept best-cat-litter-... as a guide by retitling it "How to
+# Choose the Best ..."). A Timely: yes idea names, in "Why now", a month from
+# this month to 3 months ahead.
 
 file="$HOME/scout/topic-scout-$(date +%F).md"
 seen="$HOME/jobs/topic-scout-seen.txt"
@@ -81,6 +85,9 @@ if [ "${1:-}" = "--check" ]; then echo "OK: $slug is new ground."; exit 0; fi
 
 if [[ $title == Best\ * && ${title,,} != *" types"* && $type != roundup ]]; then
   reject "\"$title\" compares products, so its type is roundup, not $type. Change the type to roundup, or give it a how-to-choose title that names no product."
+fi
+if [[ $slug == best-* && $slug != *-types* && $type != roundup ]]; then
+  reject "the slug $slug starts with best-, so the idea compares products and its type is roundup, not $type. Change the type to roundup, or pick a slug that does not start with best-."
 fi
 if [ "$type" = roundup ] && [ "$(grep -c '^- Type: roundup' "$file")" -ge 3 ]; then
   reject "FILE already has 3 roundups, the most a run may have (rule 9). Pick an idea that is a guide or how-to."

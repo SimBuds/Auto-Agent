@@ -78,8 +78,15 @@ approves every stage by hand.
      call.
    - **The seen list takes only reviewed runs.** Tuning runs made on one day
      for one window used up that window's topics (run 17 found 4 ideas in 40
-     minutes), and Hermes's retry guard ends a session after about 50
-     searches that make no progress.
+     minutes).
+   - **A run has 50 web searches, total.** Hermes blocks `web_search` after
+     50 calls in one turn (`loop_web_search_cap`), and a `--oneshot` job is
+     one turn. Run 19, under the same conditions as run 18's 10 ideas, spent
+     its 50 re-running searches that compression had dropped (one query 6
+     times) and stopped at 3. The prompt now budgets 4 searches per idea, one
+     idea at a time. That rule is prompt-only, but it held: runs 20 and 21,
+     back to back under run 18's conditions, each reached 10 ideas in 18 to
+     20 minutes with no query repeated, no search cap and 0 dead URLs.
    - **Casey's review stays the last gate.** Run 18 passed every check (10
      ideas, 7 timely, 0 dead URLs, 17 minutes of research and 2 of sweep),
      yet no check can tell a real event link from a pretext, or a retailer
@@ -194,7 +201,14 @@ is decided.
   (observed 2026-09-25 on `uname -r`). Hermes does scan commands (its
   scanner is called Tirith), but on 2026-09-26 it flagged two harmless
   commands as HIGH risk and they ran anyway, "auto-approved by smart
-  approval", in a run nobody was watching. The VM and its snapshots are the
+  approval", in a run nobody was watching. Other flagged commands are
+  refused in a one-shot run: a heredoc piped into `bash` was "BLOCKED ...
+  single-query mode (-q) runs without a user present to approve it" in every
+  topic scout run from 16 to 19 (the switch is
+  `approvals.single_query_mode`, left unset), and a brace group or `if`
+  that appends to a file was refused as "Nested executable body could not be
+  resolved" in every sweep since the summary step took that shape. So the scanner neither reliably
+  allows nor reliably stops a command, and the VM and its snapshots are the
   only boundary. Before any scheduled job is set up, decide what that job may run
   unattended, and keep a fresh snapshot to roll back to.
 

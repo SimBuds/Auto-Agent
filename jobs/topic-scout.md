@@ -28,7 +28,11 @@ a repeat). Find new ground.
    title and snippet whenever that is enough (a URL like /shop/, /b/ or
    /product/ is a shop page). Use `web_extract` only when a snippet truly is
    not enough, on no more than 3 pages in the whole run. Long page reads fill
-   your memory and make you forget these instructions.
+   your memory and make you forget these instructions. The whole run may
+   make 50 `web_search` calls, and after that search is blocked for the rest
+   of the run. So research one idea at a time: search only for the idea you
+   are working on, never for the next one until this one is added or left
+   out, use at most 4 searches per idea, and never run the same query twice.
 2. Never search, open, or cite any amazon.* page. Amazon's terms forbid it.
 3. Every competitor URL and every source URL must be a URL that appeared in a
    `web_search` result during this run. Never write a URL from memory. Never
@@ -154,12 +158,15 @@ done
      scripts but the page exists. If fewer than 4 remain, search for more.
      If you cannot reach 3, the idea goes to LEFT like any other short idea.
 
-4. Add the finished idea to FILE now, in one command, copying every URL
-   character for character from the search results you just read. Write the
-   heading without a number: the script numbers it and appends it.
+4. Add the finished idea to FILE now, in one command exactly this shape,
+   copying every URL character for character from the search results you
+   just read. It writes the idea to `~/scout/idea.md`, then hands that file
+   to the script. Write the heading without a number: the script numbers it
+   and appends it. Never pipe the idea straight into `bash`: that form is
+   blocked.
 
 ```bash
-bash ~/jobs/add-idea.sh <<'IDEA'
+cat > ~/scout/idea.md <<'IDEA'
 ## Working title
 
 - Slug: `the-slug`
@@ -179,6 +186,7 @@ bash ~/jobs/add-idea.sh <<'IDEA'
 - Sources:
   - https://example.ca/source-page (what it shows)
 IDEA
+bash ~/jobs/add-idea.sh < ~/scout/idea.md
 ```
 
 5. Repeat steps 2 to 4 until FILE holds 10 ideas, or you run out of good

@@ -177,7 +177,9 @@ approves every stage by hand.
    Phases 9 and 10 (2026-09-30) did that for Hugging Face: the collector
    records each model's total parameters, and `add-rating.sh --hf` rates
    every HF item from its kind and size before Hermes starts, so Hermes
-   rates only HN and arXiv.
+   rates only HN and arXiv. Phase 11 (2026-10-01) removed the arXiv cap's
+   machine exemption after run 16 put a scaling-laws paper at machine 5 by
+   quoting "MoE layers": a paper now rates at most 4.
 
    The profile is personal, so it lives in Portfolio next to MASTER-CASEY.md,
    gitignored there like it, as its single source (Casey moved it there

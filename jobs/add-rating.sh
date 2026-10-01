@@ -17,16 +17,21 @@
 # under tier3 and agent news under machine): a machine or tier rating quotes,
 # in double quotes, a term from that MATCH's own section of the profile, read
 # at run time. And tier1 is 5 unless the reason says "in passing" (run 1 gave
-# all 21 Tier 1 items a 4). An arXiv paper takes at most 4 unless it is machine
-# (round 3, after research papers took the top slots through broad terms), so
-# for papers tier1 is 4 with no "in passing" needed.
+# all 21 Tier 1 items a 4). An arXiv paper takes at most 4 (round 3, after
+# research papers took the top slots through broad terms), so for papers tier1
+# is 4 with no "in passing" needed. A paper is never machine either (Phase 11:
+# run 16 put a MoE scaling-laws paper at machine 5 by quoting "MoE layers",
+# and research changes nothing on this workstation the way a release does).
 #
 # Hugging Face items are rated by --hf from their Kind and Params lines, not
 # by the model (Phase 10, after runs 10 to 15 split the same models between
 # 5, 4 and 2). An LLM up to HF_FIT_B billion total parameters fits this
 # machine (a 10 GB GPU with MoE offload) and is tier1 5. A larger LLM, an LLM
-# of unknown size, and any other kind of model are tier2 4.
+# of unknown size, and any other kind of model are tier2 4. So is one under
+# HF_MIN_B: small image-text models are mostly OCR tools (TeleOCR, 1.4B, took
+# tier1 5 in runs 16 and 17), which the profile puts in Tier 2.
 HF_FIT_B=35
+HF_MIN_B=3
 
 dir="$HOME/news"
 profile="$dir/CASEY-INTERESTS.md"
@@ -109,6 +114,8 @@ if [ "${1:-}" = "--hf" ]; then
     case "$kind" in
       text-generation|image-text-to-text)
         if [ -z "$params" ]; then score=4; match=tier2; reason="script: $kind, size unknown"
+        elif awk -v b="$b" -v min="$HF_MIN_B" 'BEGIN { exit !(b < min) }'; then
+          score=4; match=tier2; reason="script: $kind, $params total, too small to be a general LLM (under ${HF_MIN_B}B)"
         elif awk -v b="$b" -v max="$HF_FIT_B" 'BEGIN { exit !(b <= max) }'; then
           score=5; match=tier1; reason="script: $kind, $params total, fits this machine (up to ${HF_FIT_B}B)"
         else score=4; match=tier2; reason="script: $kind, $params total, too large for this machine (over ${HF_FIT_B}B)"; fi ;;
@@ -144,8 +151,8 @@ while IFS= read -r line; do
     *) reject "$id: MATCH \"$match\" is not machine, tier1, tier2, tier3, none or not-interested"; continue ;;
   esac
   if [[ " $fits " != *" $score "* ]]; then reject "$id: score $score does not fit $match (it takes $fits)"; continue; fi
-  if [[ $id == arxiv:* && $score == 5 && $match != machine ]]; then
-    reject "$id: an arXiv paper takes at most 4 unless it changes this machine. Use tier1 or tier2 at 4"; continue
+  if [[ $id == arxiv:* && $score == 5 ]]; then
+    reject "$id: an arXiv paper takes at most 4. Use tier1 or tier2 at 4"; continue
   fi
   if [ ${#reason} -lt 10 ] || [ ${#reason} -gt 200 ]; then reject "$id: the reason must be 10 to 200 characters, one line"; continue; fi
   case "$match" in

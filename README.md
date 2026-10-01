@@ -526,16 +526,16 @@ its MATCH (machine 5, tier1 5 or 4, tier2 4, tier3 3, none 2,
 not-interested 1), or whose reason is not 10 to 200 characters. A machine or
 tier rating must quote, in double quotes, a term from that MATCH's own
 section of the profile (read at run time), and tier1 at 4 must say "in
-passing". An arXiv paper takes at most 4 unless it is machine, so for papers
-tier1 is 4 without "in passing". A quote that is only one of the profile's
+passing". An arXiv paper takes at most 4 and is never machine, so for
+papers tier1 is 4 without "in passing". A quote that is only one of the profile's
 bold headings ("Local AI", "AI automation") is refused, since it names a
 category rather than a topic. Hugging Face items are rated by the script
 before Hermes starts (`--hf`), from the collector's Kind and Params lines: a
-text-generation or image-text-to-text model up to 35B total parameters is
-tier1 5, a larger one or one of unknown size tier2 4, and any other kind
-tier2 4. Hermes rates only HN and arXiv. Its tests run on the host with a made-up
+text-generation or image-text-to-text model from 3B to 35B total
+parameters is tier1 5. One under 3B (mostly OCR tools), over 35B, or of
+unknown size is tier2 4, and so is any other kind. Hermes rates only HN and arXiv. Its tests run on the host with a made-up
 profile, never the real one: `bash jobs/test-add-rating.sh` must end
-`passed=53 failed=0`.
+`passed=57 failed=0`.
 
 ```bash
 # Runs in: inside the VM.

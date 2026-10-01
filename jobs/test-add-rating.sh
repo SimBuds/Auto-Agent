@@ -204,7 +204,12 @@ q "a term wrapped across two lines still matches"  'hn:11 | 5 | tier1 | "Core We
 # round 3: an arXiv paper takes at most 4 unless machine
 q "arxiv tier1 5 is rejected"                       'arxiv:2609.90001 | 5 | tier1 | "speculative decoding" method for faster decoding'  REJECTED arXiv
 q "arxiv tier1 4 needs no in passing"               'arxiv:2609.90001 | 4 | tier1 | "speculative decoding" method for faster decoding'  ADDED
-q "arxiv machine 5 is added"                        'arxiv:2609.90002 | 5 | machine | "llama.cpp" kernel change measured on consumer GPUs' ADDED
+# Phase 11: a paper is never machine. Run 16 put a MoE scaling-laws paper at
+# machine 5 by quoting "MoE layers", and a paper changes nothing on the machine.
+q "arxiv machine is rejected"                       'arxiv:2609.90002 | 5 | machine | "llama.cpp" kernel change measured on consumer GPUs' REJECTED arXiv
+out=$(printf '%s\n' 'arxiv:2609.90004 | 5 | tier1 | "speculative decoding" kernel for consumer GPUs' | run2 2>&1)
+[[ $out == REJECTED:*arXiv* ]] && ! printf '%s' "$out" | head -1 | grep -qi machine && ok "quote: the arXiv refusal no longer offers machine" || bad "quote: arXiv message" "$out"
+q "arxiv tier1 4 after the refusals is added"       'arxiv:2609.90002 | 4 | tier1 | "speculative decoding" kernel for consumer GPUs' ADDED
 q "arxiv tier2 4 is added"                          'arxiv:2609.90003 | 4 | tier2 | "VRAM" use of long-context inference'              ADDED
 # round 4: a section's bold label is a heading, not a topic (runs 8 and 9 split on "AI automation")
 q "machine quoting its label is rejected"           'hn:19 | 5 | machine | "Local AI" change on this workstation'              REJECTED heading
@@ -234,11 +239,13 @@ hfitem() { printf '\n### hf:%s\n\n- Title: %s\n- URL: https://huggingface.co/%s\
   hfitem a/vlm-27b image-text-to-text 27.8B
   hfitem a/image text-to-image 7.1B
   hfitem a/nokind "" 1.0B
+  hfitem a/ocr-small image-text-to-text 1.4B
+  hfitem a/llm-3b text-generation 3.0B
 } > "$T3/news/candidates-2026-09-29.md"
 run3() { HOME="$T3" bash "$SCRIPT" "$@"; }
 R3="$T3/news/ratings-2026-09-29.txt"
 out=$(run3 --hf 2>&1); rc=$?
-[ $rc -eq 0 ] && [ "$(grep -c . "$R3" 2>/dev/null)" = 7 ] && ok "--hf: all 7 hf items rated, exit 0, no profile needed" || bad "--hf run" "rc=$rc out=$out"
+[ $rc -eq 0 ] && [ "$(grep -c . "$R3" 2>/dev/null)" = 9 ] && ok "--hf: all 9 hf items rated, exit 0, no profile needed" || bad "--hf run" "rc=$rc out=$out"
 hf() {  # $1 name, $2 id, $3 score, $4 match, $5 text the reason must hold
   line=$(awk -F'\t' -v id="hf:a/$2" '$1 == id' "$R3" 2>/dev/null)
   IFS=$'\t' read -r _ sc ma _ _ re <<< "$line"
@@ -251,10 +258,12 @@ hf "an LLM with no Params is tier2 4"          llm-nosize 4 tier2 "size unknown"
 hf "an image-text-to-text LLM at 27.8B fits"   vlm-27b    5 tier1 "fits this machine"
 hf "a text-to-image model is tier2 4"          image      4 tier2 "not an LLM"
 hf "no Kind is tier2 4"                        nokind     4 tier2 "no kind"
+hf "under 3B is too small, tier2 4 (TeleOCR)"  ocr-small  4 tier2 "too small"
+hf "exactly 3B still fits"                     llm-3b     5 tier1 "fits this machine"
 out=$(run3 --left 2>&1)
-[[ $out == *"7 of 8 rated"* ]] && [[ $out == *"hn:31"* ]] && ok "--hf: HN left for Hermes" || bad "--hf left" "$out"
+[[ $out == *"9 of 10 rated"* ]] && [[ $out == *"hn:31"* ]] && ok "--hf: HN left for Hermes" || bad "--hf left" "$out"
 out=$(run3 --hf 2>&1); rc=$?
-[ $rc -eq 0 ] && [ "$(grep -c . "$R3")" = 7 ] && ok "--hf: a second run adds nothing" || bad "--hf twice" "rc=$rc out=$out"
+[ $rc -eq 0 ] && [ "$(grep -c . "$R3")" = 9 ] && ok "--hf: a second run adds nothing" || bad "--hf twice" "rc=$rc out=$out"
 cp "$T/news/CASEY-INTERESTS.md" "$T3/news/"
 out=$(echo 'hf:a/image | 5 | tier1 | "Open-weight models" image model' | run3 2>&1)
 [[ $out == REJECTED:*"already rated"* ]] && ok "--hf: a later Hermes line for an hf item is refused" || bad "--hf then Hermes" "$out"

@@ -25,7 +25,7 @@ nothing except through that script.
      that is not tech news and matches no tier (sports, celebrity, general
      politics).
 
-   An arXiv paper (an `arxiv:` id) takes at most 4 unless it is `machine`:
+   An arXiv paper (an `arxiv:` id) takes at most 4 and is never `machine`:
    a paper on a Tier 1 topic is `tier1` at 4, with no "in passing" needed.
 3. The reason is one line of 10 to 200 characters. For `machine`, `tier1`,
    `tier2` and `tier3` it quotes, in double quotes, a specific term copied

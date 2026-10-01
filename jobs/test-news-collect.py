@@ -83,6 +83,11 @@ with tempfile.TemporaryDirectory() as tmp:
         text = open(md).read() if os.path.exists(md) else ""
         check("markdown: lists every item id and title",
               text and all(i["id"] in text and i["title"] in text for i in data["items"]))
+        check("markdown: an HF model's total parameters, from the API or its name",
+              "### hf:convaiinnovations/laya" in text and "- Params: 0.4B" in text
+              and "- Params: 35.0B" in text, text[-900:])
+        check("markdown: only HF items get a Params line",
+              text.count("- Params: ") == 2, text.count("- Params: "))
     else:
         check("happy: candidates JSON written", False, p.stderr[-400:])
 
@@ -171,6 +176,36 @@ with tempfile.TemporaryDirectory() as tmp:
         nc.fetch_hn(record, datetime(2026, 9, 27, 12, 40, 55, tzinfo=timezone.utc))
         check("hn: the request url is the same within one hour, so the cache can hit",
               len(urls) == 2 and urls[0] == urls[1], urls)
+
+        # Total parameters, so the rating script can tell an LLM that fits this
+        # machine from one that does not. Shapes from the live API, 2026-09-30.
+        def pb(m):
+            try:
+                v = nc.params_b(m)
+            except Exception as e:
+                return f"raised {e!r}"
+            return None if v is None else round(v, 1)
+        for name, model, want in [
+            ("safetensors total only", {"id": "Qwen/Qwen3.8", "safetensors": {"total": 27781427952}}, 27.8),
+            ("gguf total only", {"id": "a/b-gguf", "gguf": {"total": 26895998464}}, 26.9),
+            ("both, the larger wins", {"id": "a/b", "safetensors": {"total": 6770790400}, "gguf": {"total": 26895998464}}, 26.9),
+            ("name only", {"id": "XiaomiMiMo/MiMo-V2.6-Distill-Qwen-9B"}, 9.0),
+            ("no count anywhere", {"id": "Altworld/Hemmingway-1"}, None),
+            ("packed quant: the name's 27B beats 6.77B", {"id": "orcarouter/OrcaSAQ-2-27B", "safetensors": {"total": 6770790400}}, 27.0),
+            ("29B-A4B gives 29, not the active 4", {"id": "XingChen-AGI/Xing4.0-29B-A4B"}, 29.0),
+            ("Qwen3.8-27B gives 27, not 3.8", {"id": "Qwen/Qwen3.8-27B"}, 27.0),
+            ("an active size alone is not a total", {"id": "a/Mixer-A4B"}, None),
+            ("malformed values are ignored", {"id": "a/b", "safetensors": "oops", "gguf": {"total": "n/a"}}, None),
+            ("under 1B", {"id": "convaiinnovations/laya", "safetensors": {"total": 421293830}}, 0.4),
+        ]:
+            got = pb(model)
+            check(f"params: {name}", got == want, f"got {got}, want {want}")
+
+        urls = []
+        nc.fetch_hf(lambda url: urls.append(url) or b"[]", datetime(2026, 9, 30, 12, tzinfo=timezone.utc))
+        need = ["safetensors", "gguf", "likes", "downloads", "createdAt", "trendingScore", "pipeline_tag"]
+        check("hf: the request expands every field it reads (expand replaces the defaults)",
+              urls and all(f"expand%5B%5D={f}" in urls[0] for f in need), urls)
 
         waits = []
         nc.sleep = waits.append

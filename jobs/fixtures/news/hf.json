@@ -1,5 +1,5 @@
 [
-{"_id":"a1","id":"convaiinnovations/laya","likes":3986,"trendingScore":3010,"private":false,"downloads":0,"tags":["text-classification"],"pipeline_tag":"text-classification","library_name":"transformers","createdAt":"2026-09-18T05:05:55.000Z","modelId":"convaiinnovations/laya"},
+{"_id":"a1","id":"convaiinnovations/laya","likes":3986,"trendingScore":3010,"private":false,"downloads":0,"tags":["text-classification"],"pipeline_tag":"text-classification","library_name":"transformers","createdAt":"2026-09-18T05:05:55.000Z","modelId":"convaiinnovations/laya","safetensors":{"parameters":{"F32":3,"F16":421293827},"total":421293830}},
 {"_id":"a2","id":"Qwen/Qwen-Image-2.1","likes":2434,"trendingScore":2242,"private":false,"downloads":52804,"tags":["text-to-image"],"pipeline_tag":"text-to-image","library_name":"diffusers","createdAt":"2026-09-14T03:47:26.000Z","modelId":"Qwen/Qwen-Image-2.1"},
-{"_id":"a3","id":"unsloth/Qwen3.6-35B-A3B-GGUF","likes":812,"trendingScore":640,"private":false,"downloads":190233,"tags":["gguf"],"pipeline_tag":"text-generation","library_name":"gguf","createdAt":"2026-08-30T11:20:00.000Z","modelId":"unsloth/Qwen3.6-35B-A3B-GGUF"}
+{"_id":"a3","id":"unsloth/Qwen3.6-35B-A3B-GGUF","likes":812,"trendingScore":640,"private":false,"downloads":190233,"tags":["gguf"],"pipeline_tag":"text-generation","library_name":"gguf","createdAt":"2026-08-30T11:20:00.000Z","modelId":"unsloth/Qwen3.6-35B-A3B-GGUF","gguf":{"total":34660610688,"architecture":"qwen3moe"}}
 ]

@@ -174,6 +174,10 @@ approves every stage by hand.
    the best since round 1, with every LLM that fits this machine at 5.
    What still splits is 4 against `none`, for papers and models with no
    size in their name: the next lever is rating those in a script.
+   Phases 9 and 10 (2026-09-30) did that for Hugging Face: the collector
+   records each model's total parameters, and `add-rating.sh --hf` rates
+   every HF item from its kind and size before Hermes starts, so Hermes
+   rates only HN and arXiv.
 
    The profile is personal, so it lives in Portfolio next to MASTER-CASEY.md,
    gitignored there like it, as its single source (Casey moved it there

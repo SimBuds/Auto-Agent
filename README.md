@@ -461,7 +461,10 @@ from the last 24 hours, counted from the start of the hour so the cache can
 hit, with at least 50 points, top 40), Hugging Face's
 trending models (top 15), and arXiv's newest papers in cs.AI, cs.CL, cs.LG
 and cs.SE (20). Each item keeps its source's own numbers (points and
-comments, trending score and likes). Lobsters is not used: its robots.txt
+comments, trending score and likes). A Hugging Face model also gets a
+`Params` line, its total parameters in billions: the largest of the API's
+GGUF and safetensors totals and the size in its name ("27B", never the
+active "A4B"), left out when none is known. Lobsters is not used: its robots.txt
 disallows all clients and declares `ai-input=no`.
 
 `CASEY-INTERESTS.md` is personal. It lives in `~/Apps/Portfolio`, next to
@@ -488,7 +491,7 @@ growing wait before it is marked FAILED. Limits and windows are constants at
 the top of the script, each with a `NEWS_*` environment override.
 
 Tests run on the host with no network, against `jobs/fixtures/news/`:
-`python3 jobs/test-news-collect.py` must end `passed=22 failed=0` and exit 0.
+`python3 jobs/test-news-collect.py` must end `passed=36 failed=0` and exit 0.
 
 ### 2. Copy the candidates, the profile and the job into the VM
 
@@ -526,12 +529,17 @@ section of the profile (read at run time), and tier1 at 4 must say "in
 passing". An arXiv paper takes at most 4 unless it is machine, so for papers
 tier1 is 4 without "in passing". A quote that is only one of the profile's
 bold headings ("Local AI", "AI automation") is refused, since it names a
-category rather than a topic. Its tests run on the host with a made-up
+category rather than a topic. Hugging Face items are rated by the script
+before Hermes starts (`--hf`), from the collector's Kind and Params lines: a
+text-generation or image-text-to-text model up to 35B total parameters is
+tier1 5, a larger one or one of unknown size tier2 4, and any other kind
+tier2 4. Hermes rates only HN and arXiv. Its tests run on the host with a made-up
 profile, never the real one: `bash jobs/test-add-rating.sh` must end
-`passed=41 failed=0`.
+`passed=53 failed=0`.
 
 ```bash
 # Runs in: inside the VM.
+bash ~/jobs/add-rating.sh --hf   # rates the hf: items first, prints one ADDED line each
 hermes chat --oneshot --toolsets "terminal" --query-file ~/jobs/news-rate.md
 bash ~/jobs/add-rating.sh --left
 bash ~/jobs/add-rating.sh --digest; echo "digest exit=$?"   # 0: all rated. 3: some unrated, listed at the end

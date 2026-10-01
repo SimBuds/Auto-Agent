@@ -4,6 +4,7 @@
 #   bash ~/jobs/add-rating.sh < ~/news/batch.txt   checks each line, appends the good ones
 #   bash ~/jobs/add-rating.sh --left               how many are rated, the next unrated ids
 #   bash ~/jobs/add-rating.sh --digest             renders ~/news/digest-DATE.md
+#   bash ~/jobs/add-rating.sh --hf                 rates every unrated hf: item itself
 #
 # A rating line is `ID | SCORE | MATCH | REASON`. MATCH names the part of
 # CASEY-INTERESTS.md that matched, and SCORE must fit it, as that file's
@@ -19,6 +20,13 @@
 # all 21 Tier 1 items a 4). An arXiv paper takes at most 4 unless it is machine
 # (round 3, after research papers took the top slots through broad terms), so
 # for papers tier1 is 4 with no "in passing" needed.
+#
+# Hugging Face items are rated by --hf from their Kind and Params lines, not
+# by the model (Phase 10, after runs 10 to 15 split the same models between
+# 5, 4 and 2). An LLM up to HF_FIT_B billion total parameters fits this
+# machine (a 10 GB GPU with MoE offload) and is tier1 5. A larger LLM, an LLM
+# of unknown size, and any other kind of model are tier2 4.
+HF_FIT_B=35
 
 dir="$HOME/news"
 profile="$dir/CASEY-INTERESTS.md"
@@ -29,13 +37,15 @@ ratings="$dir/ratings-$date.txt"
 digest="$dir/digest-$date.md"
 touch "$ratings"
 
-# id, title, url and size of every candidate, one tab-separated line each, in file order.
+# id, title, url, size, kind and params of every candidate, one tab-separated line each, in file order.
 table=$(awk '
-  /^### / { if (id != "") print id "\t" t "\t" u "\t" z; id = substr($0, 5); t = u = z = "" }
+  /^### / { if (id != "") print id "\t" t "\t" u "\t" z "\t" k "\t" p; id = substr($0, 5); t = u = z = k = p = "" }
   /^- Title: / { t = substr($0, 10) }
   /^- URL: / { u = substr($0, 8) }
   /^- Size: / { z = substr($0, 9) }
-  END { if (id != "") print id "\t" t "\t" u "\t" z }
+  /^- Kind: / { k = substr($0, 9) }
+  /^- Params: / { p = substr($0, 11) }
+  END { if (id != "") print id "\t" t "\t" u "\t" z "\t" k "\t" p }
 ' "$cand")
 total=$(printf '%s\n' "$table" | grep -c .)
 
@@ -82,6 +92,34 @@ if [ "${1:-}" = "--digest" ]; then
   } > "$digest"
   echo "WROTE: $digest ($done of $total rated)"
   [ "$done" -lt "$total" ] && exit 3
+  exit 0
+fi
+
+if [ "${1:-}" = "--hf" ]; then
+  added=0
+  # cut, not read: read with a tab IFS merges the empty Kind of a model
+  # with no pipeline tag into the next field.
+  while IFS= read -r row; do
+    id=$(printf '%s' "$row" | cut -f1)
+    [[ $id == hf:* ]] || continue
+    title=$(printf '%s' "$row" | cut -f2); url=$(printf '%s' "$row" | cut -f3)
+    kind=$(printf '%s' "$row" | cut -f5); params=$(printf '%s' "$row" | cut -f6)
+    rated_ids | grep -qxF -- "$id" && continue
+    b=${params%B}
+    case "$kind" in
+      text-generation|image-text-to-text)
+        if [ -z "$params" ]; then score=4; match=tier2; reason="script: $kind, size unknown"
+        elif awk -v b="$b" -v max="$HF_FIT_B" 'BEGIN { exit !(b <= max) }'; then
+          score=5; match=tier1; reason="script: $kind, $params total, fits this machine (up to ${HF_FIT_B}B)"
+        else score=4; match=tier2; reason="script: $kind, $params total, too large for this machine (over ${HF_FIT_B}B)"; fi ;;
+      "") score=4; match=tier2; reason="script: no kind given, not rated as an LLM" ;;
+      *) score=4; match=tier2; reason="script: $kind${params:+, $params}, not an LLM" ;;
+    esac
+    printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$id" "$score" "$match" "$title" "$url" "$reason" >> "$ratings"
+    echo "ADDED: $id ($score, $match)"
+    added=$((added + 1))
+  done <<< "$table"
+  echo "$added added by the script. $(rated_ids | sort -u | grep -c .) of $total rated."
   exit 0
 fi
 

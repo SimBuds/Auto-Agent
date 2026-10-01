@@ -18,6 +18,7 @@ the file and the rest are still written), 1 when NEWS_CONTACT is unset.
 import hashlib
 import json
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -134,8 +135,30 @@ def fetch_hn(read, now):
     return items[:HN_LIMIT]
 
 
+# "27B" or "1.5b" standing alone in a model name. A letter before it ("A4B",
+# the active parameters of a MoE) or a digit or dot ("3.8" in "Qwen3.8") does
+# not count.
+NAME_SIZE = re.compile(r"(?<![A-Za-z0-9.])(\d+(?:\.\d+)?)[Bb](?![A-Za-z])")
+
+
+def params_b(model):
+    """Total parameters in billions: the largest of the API's gguf and
+    safetensors totals and the size in the name, or None when none is known.
+    The largest wins because a packed quant reports a small safetensors total
+    (OrcaSAQ-2-27B: 6.77B)."""
+    found = [float(n) for n in NAME_SIZE.findall(model.get("id", ""))]
+    for field in ("gguf", "safetensors"):
+        total = model.get(field)
+        total = total.get("total") if isinstance(total, dict) else None
+        if isinstance(total, (int, float)) and total > 0:
+            found.append(total / 1e9)
+    return max(found) if found else None
+
+
 def fetch_hf(read, now):
-    query = urllib.parse.urlencode({"sort": "trendingScore", "limit": HF_LIMIT})
+    # expand[] replaces the default fields, so every field read below is named.
+    fields = ["trendingScore", "likes", "downloads", "createdAt", "pipeline_tag", "safetensors", "gguf"]
+    query = urllib.parse.urlencode([("sort", "trendingScore"), ("limit", HF_LIMIT)] + [("expand[]", f) for f in fields])
     try:
         models = json.loads(read("https://huggingface.co/api/models?" + query))
         return [{
@@ -144,6 +167,7 @@ def fetch_hf(read, now):
             "published": m.get("createdAt", ""), "kind": m.get("pipeline_tag") or "",
             "size": {"trending": m.get("trendingScore") or 0, "likes": m.get("likes") or 0,
                      "downloads": m.get("downloads") or 0},
+            "params_b": params_b(m),
         } for m in models][:HF_LIMIT]
     except (ValueError, KeyError, TypeError) as e:
         raise SourceError(f"huggingface.co: unreadable response ({e})") from e
@@ -196,6 +220,8 @@ def write_candidates(now, sources, items):
             lines.append(f"- Discussion: {i['discussion']}")
         if i.get("kind"):
             lines.append(f"- Kind: {i['kind']}")
+        if i.get("params_b") is not None:
+            lines.append(f"- Params: {i['params_b']:.1f}B")
         lines += [f"- Published: {i['published']}", f"- Size: {size}"]
     with open(stem + ".md", "w") as f:
         f.write("\n".join(lines) + "\n")

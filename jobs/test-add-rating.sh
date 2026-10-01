@@ -220,6 +220,51 @@ out=$(run2 --left 2>&1); rc=$?
 [ $rc -eq 0 ] && [[ $out == *"11 of 14 rated"* ]] && ok "profile missing: --left still works" || bad "profile missing --left" "rc=$rc out=$out"
 rm -rf "$T2"
 
+# --- --hf: the script rates Hugging Face items from Kind and Params (Phase 10) ---
+T3=$(mktemp -d); mkdir -p "$T3/news"
+hfitem() { printf '\n### hf:%s\n\n- Title: %s\n- URL: https://huggingface.co/%s\n' "$1" "$1" "$1"
+  [ -n "$2" ] && printf -- '- Kind: %s\n' "$2"; [ -n "$3" ] && printf -- '- Params: %s\n' "$3"
+  printf -- '- Published: 2026-09-20T00:00:00.000Z\n- Size: trending 10, likes 5, downloads 0\n'; }
+{ echo "# News candidates 2026-09-29"; echo; echo "## Items"
+  printf '\n### hn:31\n\n- Title: Story 31\n- URL: https://example.com/31\n- Size: points 60, comments 5\n'
+  hfitem a/llm-9b text-generation 9.0B
+  hfitem a/llm-35b text-generation 35.0B
+  hfitem a/llm-big text-generation 35.1B
+  hfitem a/llm-nosize text-generation ""
+  hfitem a/vlm-27b image-text-to-text 27.8B
+  hfitem a/image text-to-image 7.1B
+  hfitem a/nokind "" 1.0B
+} > "$T3/news/candidates-2026-09-29.md"
+run3() { HOME="$T3" bash "$SCRIPT" "$@"; }
+R3="$T3/news/ratings-2026-09-29.txt"
+out=$(run3 --hf 2>&1); rc=$?
+[ $rc -eq 0 ] && [ "$(grep -c . "$R3" 2>/dev/null)" = 7 ] && ok "--hf: all 7 hf items rated, exit 0, no profile needed" || bad "--hf run" "rc=$rc out=$out"
+hf() {  # $1 name, $2 id, $3 score, $4 match, $5 text the reason must hold
+  line=$(awk -F'\t' -v id="hf:a/$2" '$1 == id' "$R3" 2>/dev/null)
+  IFS=$'\t' read -r _ sc ma _ _ re <<< "$line"
+  [ "$sc" = "$3" ] && [ "$ma" = "$4" ] && [[ $re == script:* ]] && [[ ${re,,} == *"${5,,}"* ]] && ok "--hf: $1" || bad "--hf: $1" "$line"
+}
+hf "a 9B LLM fits, tier1 5"                    llm-9b     5 tier1 "fits this machine"
+hf "exactly 35B still fits"                    llm-35b    5 tier1 "fits this machine"
+hf "35.1B is too large, tier2 4"               llm-big    4 tier2 "too large"
+hf "an LLM with no Params is tier2 4"          llm-nosize 4 tier2 "size unknown"
+hf "an image-text-to-text LLM at 27.8B fits"   vlm-27b    5 tier1 "fits this machine"
+hf "a text-to-image model is tier2 4"          image      4 tier2 "not an LLM"
+hf "no Kind is tier2 4"                        nokind     4 tier2 "no kind"
+out=$(run3 --left 2>&1)
+[[ $out == *"7 of 8 rated"* ]] && [[ $out == *"hn:31"* ]] && ok "--hf: HN left for Hermes" || bad "--hf left" "$out"
+out=$(run3 --hf 2>&1); rc=$?
+[ $rc -eq 0 ] && [ "$(grep -c . "$R3")" = 7 ] && ok "--hf: a second run adds nothing" || bad "--hf twice" "rc=$rc out=$out"
+cp "$T/news/CASEY-INTERESTS.md" "$T3/news/"
+out=$(echo 'hf:a/image | 5 | tier1 | "Open-weight models" image model' | run3 2>&1)
+[[ $out == REJECTED:*"already rated"* ]] && ok "--hf: a later Hermes line for an hf item is refused" || bad "--hf then Hermes" "$out"
+rm -rf "$T3"
+T4=$(mktemp -d); mkdir -p "$T4/news"
+printf '# News candidates 2026-09-29\n\n## Items\n\n### hn:41\n\n- Title: Story\n- URL: https://example.com/41\n- Size: none\n' > "$T4/news/candidates-2026-09-29.md"
+out=$(HOME="$T4" bash "$SCRIPT" --hf 2>&1); rc=$?
+[ $rc -eq 0 ] && [[ $out == *"0 added"* ]] && ok "--hf: no hf items, 0 added, exit 0" || bad "--hf none" "rc=$rc out=$out"
+rm -rf "$T4"
+
 echo "passed=$pass failed=$fail"
 rm -rf "$T"
 [ $fail -eq 0 ]

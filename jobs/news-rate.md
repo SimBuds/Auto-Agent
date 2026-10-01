@@ -42,6 +42,9 @@ nothing except through that script.
    still a 5.
 4. Rate every item exactly once. Never skip one because it is hard. Pick the
    closest MATCH and say why.
+5. The `hf:` items (Hugging Face models) are already rated by the script
+   from their kind and size. Never rate them: `--left` does not list them,
+   and the script refuses them as already rated.
 
 ## Steps
 
@@ -57,7 +60,8 @@ ls ~/news/candidates-*.md
 cat ~/news/candidates-DATE.md
 ```
 
-2. Rate the next 10 unrated items, in file order, in one command exactly this
+2. Rate the 10 items the last `--left` listed as "Next unrated" (run
+   `bash ~/jobs/add-rating.sh --left` first), in one command exactly this
    shape: it writes the lines to `~/news/batch.txt`, then hands that file to
    the script. One line per item, `ID | SCORE | MATCH | REASON`, with the ID
    copied from its `### ` heading. Never pipe the lines straight into
@@ -66,7 +70,6 @@ cat ~/news/candidates-DATE.md
 ```bash
 cat > ~/news/batch.txt <<'RATINGS'
 hn:12345 | 5 | machine | "llama.cpp" release, runs every model on this machine
-hf:org/model | 5 | tier1 | new "open-weight LLMs" release, 9B, fits this GPU
 hn:67890 | 4 | tier1 | "WordPress" named in passing in a hosting outage story
 hn:24680 | 2 | none | a Go concurrency article, no tier names it
 RATINGS

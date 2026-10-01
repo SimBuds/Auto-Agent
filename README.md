@@ -493,14 +493,18 @@ Tests run on the host with no network, against `jobs/fixtures/news/`:
 ### 2. Copy the candidates, the profile and the job into the VM
 
 `DAY` is the date in the candidates file name from step 1. The profile goes
-in only for this run: step 3 deletes it again.
+in only for this run: step 3 deletes it again. It goes in without its
+*Tuning notes*, which are Casey's log, not rules: in run 13 the model cited
+them to drop two LLMs to `none`.
 
 ```bash
 # Runs in: local terminal, host, in this repo. Safe to re-run: it overwrites the VM copies.
 DAY=$(date +%F)   # EDIT if step 1 ran on another day
 ls -l "out/news/candidates-$DAY.md" ~/Apps/Portfolio/CASEY-INTERESTS.md   # both must exist
 ssh -p 22220 hermes@localhost 'mkdir -p ~/news ~/jobs'
-scp -P 22220 "out/news/candidates-$DAY.md" ~/Apps/Portfolio/CASEY-INTERESTS.md hermes@localhost:news/
+scp -P 22220 "out/news/candidates-$DAY.md" hermes@localhost:news/
+awk '/^## Tuning notes/ { exit } 1' ~/Apps/Portfolio/CASEY-INTERESTS.md | ssh -p 22220 hermes@localhost 'cat > ~/news/CASEY-INTERESTS.md'
+ssh -p 22220 hermes@localhost 'grep -c "Tuning notes" ~/news/CASEY-INTERESTS.md'   # must print 0
 scp -P 22220 jobs/news-rate.md jobs/add-rating.sh hermes@localhost:jobs/
 ```
 
@@ -520,9 +524,11 @@ not-interested 1), or whose reason is not 10 to 200 characters. A machine or
 tier rating must quote, in double quotes, a term from that MATCH's own
 section of the profile (read at run time), and tier1 at 4 must say "in
 passing". An arXiv paper takes at most 4 unless it is machine, so for papers
-tier1 is 4 without "in passing". Its tests run on the host with a made-up
+tier1 is 4 without "in passing". A quote that is only one of the profile's
+bold headings ("Local AI", "AI automation") is refused, since it names a
+category rather than a topic. Its tests run on the host with a made-up
 profile, never the real one: `bash jobs/test-add-rating.sh` must end
-`passed=36 failed=0`.
+`passed=41 failed=0`.
 
 ```bash
 # Runs in: inside the VM.

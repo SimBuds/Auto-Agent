@@ -206,6 +206,12 @@ q "arxiv tier1 5 is rejected"                       'arxiv:2609.90001 | 5 | tier
 q "arxiv tier1 4 needs no in passing"               'arxiv:2609.90001 | 4 | tier1 | "speculative decoding" method for faster decoding'  ADDED
 q "arxiv machine 5 is added"                        'arxiv:2609.90002 | 5 | machine | "llama.cpp" kernel change measured on consumer GPUs' ADDED
 q "arxiv tier2 4 is added"                          'arxiv:2609.90003 | 4 | tier2 | "VRAM" use of long-context inference'              ADDED
+# round 4: a section's bold label is a heading, not a topic (runs 8 and 9 split on "AI automation")
+q "machine quoting its label is rejected"           'hn:19 | 5 | machine | "Local AI" change on this workstation'              REJECTED heading
+q "tier1 quoting its label is rejected"             'hn:19 | 5 | tier1 | "Technical SEO" story about rankings'               REJECTED heading
+q "a label in another case is rejected"             'hn:19 | 5 | tier1 | "local and frontier ai" agents misbehaving'         REJECTED heading
+q "a label with its colon is rejected"              'hn:19 | 5 | machine | "OS:" news for this desktop'                       REJECTED heading
+q "tier2 quoting its label is rejected"             'hn:19 | 4 | tier2 | "Hardware for local inference and gaming" story'   REJECTED heading
 [ "$(grep -c . "$R2")" = 11 ] && ok "quote: only the 11 good lines were recorded" || bad "quote: recorded" "$(cat "$R2")"
 rm "$T2/news/CASEY-INTERESTS.md"
 out=$(echo 'hn:19 | 2 | none | a Go concurrency article, no tier names it' | run2 2>&1); rc=$?

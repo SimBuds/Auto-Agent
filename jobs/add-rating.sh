@@ -44,6 +44,9 @@ rated_ids() { cut -f1 "$ratings"; }
 # The text of one profile section on one line, without markdown's backticks and
 # stars, so a term the file wraps across two lines ("Core Web" / "Vitals") still matches.
 section() { awk -v h="$1" '/^## / { on = (index($0, h) == 1); next } on' "$profile" | tr -d '`*' | tr '\n' ' ' | tr -s ' '; }
+# A section's bold labels ("Local AI", "AI automation"), one per line. Quoting a
+# label names a category, not a topic, and runs 8 and 9 split on exactly that.
+labels() { awk -v h="$1" '/^## / { on = (index($0, h) == 1); next } on' "$profile" | grep -o '\*\*[^*]*\*\*' | tr -d '*' | sed 's/[.:]*$//'; }
 
 if [ "${1:-}" = "--left" ]; then
   done=$(rated_ids | sort -u | grep -c .)
@@ -119,6 +122,9 @@ while IFS= read -r line; do
     fi
     if [ ${#quoted} -lt 3 ] || [[ " models model release releases news local open new tools tool software update updates agents agent the and for with " == *" ${quoted,,} "* ]]; then
       reject "$id: \"$quoted\" is too generic to show what matched. Quote a specific term from the $label section"; continue
+    fi
+    if labels "$head" | grep -qixF -- "$(printf '%s' "$quoted" | sed 's/[.:]*$//')"; then
+      reject "$id: \"$quoted\" is a heading in the $label section, not a topic. Quote the specific product, project or topic under it"; continue
     fi
     if ! section "$head" | grep -qiF -- "$quoted"; then
       reject "$id: \"$quoted\" is not in the $label section of CASEY-INTERESTS.md, so this is not $match. Pick the MATCH whose section names it"; continue

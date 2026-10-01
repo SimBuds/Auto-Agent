@@ -34,7 +34,10 @@ nothing except through that script.
    against that section. If the term you need is in another section, the
    item belongs to that section's MATCH. A category label or a generic word
    ("models", "news", "agents") does not show a match: quote the specific
-   product, project or topic. `none` and `not-interested` need no quote.
+   product, project or topic. The bold headings in the profile ("Local AI",
+   "AI automation", "AI research and industry") are labels, and the script
+   refuses them: quote a term from the text under the heading. `none` and
+   `not-interested` need no quote.
    Interest is separate from size: a small item that affects the machine is
    still a 5.
 4. Rate every item exactly once. Never skip one because it is hard. Pick the
@@ -74,9 +77,10 @@ bash ~/jobs/add-rating.sh < ~/news/batch.txt
    recorded, and the script says why (unknown id, already rated, a score that
    does not fit its MATCH, a missing or wrong quoted term, a reason too
    short). Fix only those lines and send them again in the same shape: when
-   the quoted term is not in the section, re-read the profile and pick the
-   MATCH whose section names the item's topic, or `none`. Never send an
-   ADDED line again.
+   a quote is refused, re-read the profile and quote a specific term from
+   the section that names the item's topic, with that section's MATCH.
+   Change a refused line to `none` only when no section names its topic: a
+   refused quote is not a reason for `none`. Never send an ADDED line again.
 
 4. Check what is left, and go back to step 2 until it prints "All N rated":
 

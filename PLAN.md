@@ -162,7 +162,18 @@ approves every stage by hand.
    script: the model follows the words it can quote. Round 3 narrowed the
    wording again (no bare "coding agents", GGUF tied to LLMs) and capped
    arXiv papers at 4 unless machine, after research papers took top slots
-   through broad terms.
+   through broad terms. It over-corrected: items at 5 fell to 8 and 2,
+   agreement to 79%, and LLMs that fit this machine drifted to Tier 2
+   through its "other new open-weight models" line. Round 4 (2026-09-30)
+   narrowed that line to non-LLM models and LLMs over 35B, and the script
+   now refuses a quote that is only a bold section heading ("AI
+   automation"), the split behind most of the run-to-run disagreement.
+   Round 5 found the model reading the profile's Tuning notes as rules
+   (run 13 cited them to drop two LLMs to `none`), so the profile now goes
+   into the VM without that section. Runs 14 and 15 then agreed on 85%,
+   the best since round 1, with every LLM that fits this machine at 5.
+   What still splits is 4 against `none`, for papers and models with no
+   size in their name: the next lever is rating those in a script.
 
    The profile is personal, so it lives in Portfolio next to MASTER-CASEY.md,
    gitignored there like it, as its single source (Casey moved it there

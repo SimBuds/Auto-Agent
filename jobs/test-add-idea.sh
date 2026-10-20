@@ -151,6 +151,20 @@ out=$(idea "Top cat scratcher picks" "best-cat-scratchers-canada" roundup | run 
 out=$(idea "How to choose a cat scratcher" "how-to-choose-cat-scratcher-canada" guide | run 2>&1); rc=$?
 [ $rc -eq 0 ] && ok "D: non-best slug typed guide added" || bad "D: non-best" "rc=$rc out=$out"
 
+# --- canadian and the year are generic (Phase 6 fixture finding) ---
+out=$(run --check cat-humidifier-canadian-winter-guide 2>&1); rc=$?
+[ $rc -eq 0 ] && ok "--check canadian+winter only shared with seen slug is OK" || bad "--check canadian" "rc=$rc out=$out"
+
+# A date shim pins the year to 2027 so the year is read from date, not hard-coded.
+mkdir -p "$T/bin"
+printf '#!/bin/bash\n[ "$*" = "+%%Y" ] && { echo 2027; exit 0; }\nexec /usr/bin/date "$@"\n' > "$T/bin/date"
+chmod +x "$T/bin/date"
+run2027() { HOME="$T" PATH="$T/bin:$PATH" bash "$SCRIPT" "$@"; }
+out=$(run2027 --check cat-fountain-2027 2>&1); rc=$?
+[ $rc -eq 2 ] && [[ $out == *cat-water-fountain* ]] && ok "--check current year is generic (fountain repeat taken)" || bad "--check year 2027" "rc=$rc out=$out"
+out=$(run2027 --check cat-fountain-2026 2>&1); rc=$?
+[ $rc -eq 0 ] && ok "--check last year is not generic" || bad "--check year 2026 in 2027" "rc=$rc out=$out"
+
 echo "passed=$pass failed=$fail"
 rm -rf "$T"
 [ $fail -eq 0 ]

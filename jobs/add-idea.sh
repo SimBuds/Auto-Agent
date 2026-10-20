@@ -25,7 +25,7 @@ file="$HOME/scout/topic-scout-$(date +%F).md"
 seen="$HOME/jobs/topic-scout-seen.txt"
 
 check() {
-  awk -v slug="$1" '
+  awk -v slug="$1" -v year="$(date +%Y)" '
     function sing(w) {
       if (w ~ /ies$/) return substr(w, 1, length(w) - 3) "y"
       if (w ~ /(ss|x|ch|sh)es$/) return substr(w, 1, length(w) - 2)
@@ -34,7 +34,7 @@ check() {
     }
     function sigwords(s,   w, k, i, out) {
       k = split(s, w, "-"); out = ""
-      for (i = 1; i <= k; i++) if (w[i] !~ /^(best|how|to|choose|cat|cats|canada|for|the|in|your|and|a|of|guide|2026|keep|safe|with|vs|on|at|from|during|is|can|do|my|you)$/) out = out " " sing(w[i])
+      for (i = 1; i <= k; i++) if (w[i] !~ ("^(best|how|to|choose|cat|cats|canada|canadian|for|the|in|your|and|a|of|guide|" year "|keep|safe|with|vs|on|at|from|during|is|can|do|my|you)$")) out = out " " sing(w[i])
       return out
     }
     function overlap(a, b,   wa, wb, i, j, na, nb, c) {

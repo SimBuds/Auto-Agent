@@ -271,7 +271,7 @@ repeats a seen topic (the word rules are in step 4). It prints REJECTED for a
 idea whose "Why now" names no month from now to 3 months ahead. It numbers
 the heading itself. Its word rules are the same as the field check's in step
 4, so keep the two identical. Its tests run on the host, never in the VM:
-`bash jobs/test-add-idea.sh` must end `passed=34 failed=0` and exit 0.
+`bash jobs/test-add-idea.sh` must end `passed=37 failed=0` and exit 0.
 
 ### 2. Run it
 
@@ -347,7 +347,7 @@ Canadian Thanksgiving is the second Monday of October).
 # Runs in: local terminal, host, in this repo.
 F=out/scout/topic-scout-2026-09-25.md   # EDIT: the file you pulled
 SEEN=jobs/topic-scout-seen.txt
-awk '
+awk -v year="$(date +%Y)" '
   function sing(w) {
     if (w ~ /ies$/) return substr(w, 1, length(w) - 3) "y"
     if (w ~ /(ss|x|ch|sh)es$/) return substr(w, 1, length(w) - 2)
@@ -356,7 +356,7 @@ awk '
   }
   function sigwords(s,   w, k, i, out) {
     k = split(s, w, "-"); out = ""
-    for (i = 1; i <= k; i++) if (w[i] !~ /^(best|how|to|choose|cat|cats|canada|for|the|in|your|and|a|of|guide|2026|keep|safe|with|vs|on|at|from|during|is|can|do|my|you)$/) out = out " " sing(w[i])
+    for (i = 1; i <= k; i++) if (w[i] !~ ("^(best|how|to|choose|cat|cats|canada|canadian|for|the|in|your|and|a|of|guide|" year "|keep|safe|with|vs|on|at|from|during|is|can|do|my|you)$")) out = out " " sing(w[i])
     return out
   }
   function overlap(a, b,   wa, wb, i, j, na, nb, c) {

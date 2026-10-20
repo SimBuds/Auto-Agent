@@ -357,7 +357,7 @@ durable home before it can be trusted to last. This repo is that home.
 |---|---|---|
 | This repo (tracked in git) | Everything below, and the VM's removal | Never by a VM action. It is the source for config copied into the VM. |
 | VM disk (`~/VMs`, including Hermes's own config, memory, and skills in the guest) | A normal shutdown and reboot | `--snapshot apply` rolls it back, a `--status-quo` session discards its changes at shutdown, and removing the VM deletes it |
-| VM snapshots (`clean`, `hermes-configured`) | Normal sessions and `--snapshot apply` | Deleted by name, or with the disk image when the VM is removed. Not tracked in git. |
+| VM snapshots (`clean`, `pre-update-2026-10-09`, `hermes-configured`, the last retaken on v0.21.6 on 2026-10-20) | Normal sessions and `--snapshot apply` | Deleted by name, or with the disk image when the VM is removed. Not tracked in git. |
 
 **Rule:** a change made by hand inside the VM (Hermes `config.yaml`, a job or
 schedule definition, a reviewed skill) is copied into this repo in the same

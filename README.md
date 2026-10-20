@@ -398,7 +398,7 @@ awk -v year="$(date +%Y)" '
   /^- /                      { list = ""; next }
   /^  - / && list == "kw"    { kw++; words = words " " $0 }
   /^  - / && list == "comp"  { comp++; if ($2 !~ /^https?:\/\//) bad("competitor line is not a URL: " $0)
-                               if ($2 ~ /^https?:\/\/[^\/]+\.store(\/|$)|\/(shop|b|product|products|collections|pet-supplies|category)\//) bad("competitor is a shop page: " $2)
+                               if ($2 ~ /^https?:\/\/[^\/]+\.store(\/|$)|\/(shop|b|best|product|products|collections|pet-supplies|category)\//) bad("competitor is a shop page: " $2)
                                if ($2 ~ /^https?:/ && ($2 in used)) bad("competitor already used by idea " used[$2] ": " $2); else used[$2] = hn }
   END {
     done_idea()

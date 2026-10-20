@@ -41,9 +41,10 @@ a repeat). Find new ground.
    search for that keyword and take the 4 or 5 most relevant results that are
    articles, guides, or reviews. A competitor is never a shop page: no
    retailer or brand product pages, category pages, or "shop" listings. A URL
-   whose path holds /shop/, /b/, /product/, /products/, /collections/,
+   whose path holds /shop/, /b/, /best/, /product/, /products/, /collections/,
    /pet-supplies/ or /category/, or whose site name ends in .store, is a shop
-   page (for example chewy.com/b/..., petsmart.ca/cat/..., kittylove.store). Skip
+   page (for example chewy.com/b/..., chewy.com/best/..., petsmart.ca/cat/...,
+   kittylove.store). Skip
    forums, social media, and video sites too. When a Canadian page (.ca, or a
    Canadian edition) ranks, prefer it.
 5. Research each idea until it has 4 or 5 distinct competitor URLs, none of

@@ -14,7 +14,7 @@ and LEFT only with those commands.
 ## Rules the sweep enforces
 
 - Rule 4: a competitor is an article, guide, or review, never a shop page. A
-  URL whose path holds /shop/, /b/, /product/, /products/, /collections/,
+  URL whose path holds /shop/, /b/, /best/, /product/, /products/, /collections/,
   /pet-supplies/ or /category/, or whose site name ends in .store, is a shop
   page.
 - Rule 5: every idea needs 3 to 5 competitor URLs. One with fewer is deleted
@@ -72,7 +72,7 @@ awk -v u='URL' '!($1=="-" && $2==u)' FILE > FILE.tmp && mv FILE.tmp FILE
       from b:
 
 ```bash
-awk '/^- Competitors:/{c=1;next} /^- /{c=0} c && /^  - http/ && $2 ~ /^https?:\/\/[^\/]+\.store(\/|$)|\/(shop|b|product|products|collections|pet-supplies|category)\//{print $2}' FILE | sort -u
+awk '/^- Competitors:/{c=1;next} /^- /{c=0} c && /^  - http/ && $2 ~ /^https?:\/\/[^\/]+\.store(\/|$)|\/(shop|b|best|product|products|collections|pet-supplies|category)\//{print $2}' FILE | sort -u
 ```
 
    d. Competitors per idea. For each idea with fewer than 3, delete the idea

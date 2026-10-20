@@ -3,8 +3,8 @@
 A plan for running [Hermes Agent](https://github.com/NousResearch/hermes-agent)
 (Nous Research) on this workstation, against the Local-LLM router, inside a
 QEMU virtual machine. Written 2026-09-25. **Status: installed and verified
-2026-09-25** (Hermes Agent v0.21.5, commit `5dcfd72`, on `qwen`). No jobs are
-scheduled yet.
+2026-09-25, updated and re-verified 2026-10-09 to 2026-10-20** (Hermes Agent
+`v0.21.6+337.g26610b0`, on `qwen`). No jobs are scheduled yet.
 
 Hermes is an agent that runs on a schedule or on demand, keeps memory between
 sessions, writes reusable "skills" from work that succeeded, and can report

@@ -105,7 +105,12 @@ hermes --version              # must print a version
 (API keys) and `hermes gateway install` (the messaging gateway service). The
 endpoint is set in step 7 instead, and the gateway stays off until Casey
 decides otherwise. On 2026-09-25 this installed Hermes Agent v0.21.5
-(commit `5dcfd72`, Python 3.14.7) into `~/.hermes`.
+(`v0.21.5+2367.g5dcfd72`, Python 3.14.7) into `~/.hermes`. On 2026-10-09
+`hermes update` (which follows `main`) moved it to `v0.21.6+337.g26610b0`.
+The config migration from schema 46 to 50 asked nothing and left every step 7
+key as set, and step 9 and a news digest run passed on it (2026-10-20). The
+update also tries to install cua-driver, the computer-use tool, which fails
+on a missing `libXi.so.6` and cannot run in this desktop-less VM anyway.
 
 ### 7. Point Hermes at the router
 

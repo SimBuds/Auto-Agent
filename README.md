@@ -380,6 +380,77 @@ F=out/scout/topic-scout-2026-09-25.md   # EDIT: the file you reviewed
 tail -n 12 jobs/topic-scout-seen.txt
 ```
 
+### Run it unattended
+
+`jobs/run-topic-scout.sh` runs steps 1 to 4 as one host command, for a
+scheduler or a hand-run. It never prompts, never starts or stops the VM, and
+never changes Hermes's config. Step 5 stays yours, after you review the file.
+
+```bash
+# Runs in: local terminal, host, in this repo, with the VM running.
+bash jobs/run-topic-scout.sh
+echo "exit=$?"
+```
+
+It connects with `BatchMode=yes`, so it needs an SSH key for
+`hermes@localhost`. Without one, ssh fails instead of asking for a password.
+
+In order, it:
+
+- takes `out/.hermes-run.lock`, one lock for every Hermes job, because they
+  share the VM and the GPU
+- deletes the last `out/scout/status.json`
+- logs its plan, then runs steps 1 to 4, reading the date from the VM
+- pulls today's file to `out/scout/topic-scout-DATE-HHMMSSZ.md` (the time is
+  UTC), so a second run on the same day keeps the first file
+- writes `out/scout/status.json` and exits
+
+The terminal shows only the step lines. Every command's output, Hermes's
+replies included, is appended to `out/scout/run.log`. Follow a run with
+`tail -f out/scout/run.log`.
+
+| Exit | Meaning | `status.json` |
+| --- | --- | --- |
+| 0 | The file is pulled and the field check passed. The URL counts are in `checks` | Written |
+| 12 | A step or the field check failed. Read `run.log` | Written |
+| 14 | Another Hermes job holds the lock. Nothing was run or written | None |
+| 2 | Called with an argument | None |
+
+The status file is written beside its final name and renamed into place, so a
+reader sees the whole file or none. No file after a run means the run was
+killed or crashed. Its keys follow SEO-LLM's `status.json`:
+
+```json
+{
+  "job": "topic-scout",
+  "exit_code": 0,
+  "stop_reason": null,
+  "finished_at": "2026-11-02T22:30:00Z",
+  "outputs": ["/path/to/Auto-Agent/out/scout/topic-scout-2026-11-02-223000Z.md"],
+  "checks": [
+    {"id": "fields", "result": "pass", "detail": "PASS: 10 ideas, all fields in shape"},
+    {"id": "urls", "result": "pass", "detail": "38 OK, 4 UNVERIFIED, 0 DEAD"}
+  ],
+  "missing": [],
+  "reason": null,
+  "log": "/path/to/Auto-Agent/out/scout/run.log"
+}
+```
+
+| Key | What it holds |
+| --- | --- |
+| `job`, `exit_code` | The job, and the same exit code the process returned |
+| `stop_reason` | `failed` (12), or `null` when it finished |
+| `finished_at` | When the file was written, in UTC |
+| `outputs` | The pulled file's absolute path, or an empty list when none was pulled |
+| `checks` | `fields` and `urls`, each with `result` `pass` or `fail` and a one-line `detail` |
+| `missing`, `reason` | Always `[]` and `null` for now |
+| `log` | The absolute path to `run.log` |
+
+Every key is always present. The tests run on the host with fakes for the VM,
+never against it: `bash jobs/test-run-topic-scout.sh` must end
+`passed=15 failed=0` and exit 0.
+
 ## Job: news digest
 
 A daily digest of AI, tech and programming news, rated for interest against

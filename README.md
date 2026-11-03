@@ -205,6 +205,17 @@ quickemu --vm debian-13.7.0-netinst.conf --snapshot apply hermes-configured  # r
 `--status-quo` is the easy way to let Hermes try something risky: nothing it
 does survives the shutdown.
 
+The job runners (*Run it unattended* under each job) never prompt, so they
+need an SSH key for `hermes@localhost`. Install it once, with the VM
+running. It asks for the hermes password one last time. Safe to run twice:
+a key already there is skipped.
+
+```bash
+# Runs in: local terminal, host.
+ssh-copy-id -p 22220 hermes@localhost
+ssh -p 22220 -o BatchMode=yes hermes@localhost true; echo "key check exit=$?"   # must print 0
+```
+
 ### 11. Optional: router-only network
 
 To stop the VM reaching CUPS, VS Code's ports, and anything else on the host's
@@ -235,8 +246,9 @@ Nothing on the host, in this repo, or in Local-LLM changes when the VM is remove
 
 Hermes researches article ideas for everything4cats and writes them in the
 shape SEO-LLM takes as input. The prompt is [`jobs/topic-scout.md`](jobs/topic-scout.md),
-and this repo holds its only durable copy. It runs by hand for now. Scheduling
-waits until the output has proven worth automating (see PLAN.md, *Good fits*).
+and this repo holds its only durable copy. It runs by hand, through
+`jobs/run-topic-scout.sh` (see *Run it unattended*), until the hub exists,
+and then on the hub's schedule (PLAN.md, *Scheduling*).
 
 Each idea carries a slug, a type (`review`, `roundup`, `guide` or `how-to`),
 3 to 6 suggested keywords (for SEO-LLM's `suggested.txt`), 3 to 5 competitor
@@ -461,7 +473,7 @@ killed or crashed. Its keys follow SEO-LLM's `status.json`:
 | Key | What it holds |
 | --- | --- |
 | `job`, `exit_code` | The job, and the same exit code the process returned |
-| `stop_reason` | `input` or `hermes_not_on_path` (10), `decision` (11), `failed` (12), `vm` or `router` (13), `terminated` (143), `interrupted` (130), or `null` when it finished |
+| `stop_reason` | `input` or `hermes_not_on_path` (10), `decision` (11), `failed` (12), `vm`, `router` or `network` (13, `network` for the news job only), `terminated` (143), `interrupted` (130), or `null` when it finished |
 | `finished_at` | When the file was written, in UTC |
 | `outputs` | The pulled file's absolute path, or an empty list when none was pulled |
 | `checks` | `sweep` (only when it found no file), `skills`, `fields` and `urls`, each with `result` `pass`, `warn` or `fail` and a one-line `detail` |
@@ -501,7 +513,9 @@ The tests run on the host with fakes for the VM, never against it:
 
 A daily digest of AI, tech and programming news, rated for interest against
 `CASEY-INTERESTS.md` (PLAN.md, Good fits #6). **Status:** built 2026-09-27,
-run by hand. Collect on the host (step 1), rate in the VM (steps 2 and 3),
+run by hand, through `jobs/run-news-digest.sh` (see *Run it unattended*),
+until the hub exists, and then on the hub's schedule (PLAN.md,
+*Scheduling*). Collect on the host (step 1), rate in the VM (steps 2 and 3),
 pull the digest (step 4).
 
 The collector runs on the host, not in the VM. It reads three public,
@@ -608,3 +622,44 @@ ls -l out/news/
 `out/news/digest-DAY.md` lists every item by interest, highest first, with
 the MATCH, the reason and the source's own size numbers. Where a rating feels
 wrong, add a dated line to the profile's *Tuning notes*.
+
+### Run it unattended
+
+`jobs/run-news-digest.sh` runs steps 1 to 4 as one host command, for a
+scheduler or a hand-run, under the same rules as the topic scout's runner
+(see topic scout, *Run it unattended*): the same lock, an SSH key for
+`hermes@localhost`, `out/news/status.json` with the same keys, and
+`out/news/run.log`.
+
+```bash
+# Runs in: local terminal, host, in this repo, with the VM running.
+NEWS_CONTACT=''   # EDIT: your contact address, for the User-Agent
+NEWS_CONTACT="$NEWS_CONTACT" bash jobs/run-news-digest.sh
+echo "exit=$?"
+```
+
+It reads the profile from `~/Apps/Portfolio/CASEY-INTERESTS.md`, or from
+`NEWS_PROFILE` when set. The profile goes into the VM without its *Tuning
+notes*, only for the rating, and leaves on every exit once it went in,
+signals included, before `status.json` is written. A removal that fails is a
+`fail` in `checks` with the command to remove it by hand, and a run that
+would have exited 0 exits 12. The candidates file is named by the
+collector's UTC date, which the runner reads from the collector's output, so
+`DAY` in steps 2 and 4 may be a day off from `date +%F` near midnight.
+
+| Exit | Meaning | `status.json` |
+| --- | --- | --- |
+| 0 | Every item is rated, the digest and ratings are pulled, and the profile is out of the VM. A `warn` on `collect` means one or more sources FAILED and the rest were rated | Written |
+| 10 | `NEWS_CONTACT` is empty, the profile or a job file is missing, there is no SSH key, or `hermes` was not found over SSH. Each is named in `missing` | Written |
+| 11 | Hermes's scanner refused a command. `reason` holds the line | Written |
+| 12 | A step failed, the collector failed, some items are still unrated (the digest is pulled anyway), or the profile could not be removed. Read `run.log` | Written |
+| 13 | Every source FAILED (`network`, no internet), the VM did not answer (`vm`), or the router is down or not serving `qwen` (`router`). Run again later | Written |
+| 14 | Another Hermes job holds the lock. Nothing was run or written | None |
+| 143, 130 | Stopped by SIGTERM or SIGINT, as for the topic scout | Written |
+| 2 | Called with an argument | None |
+
+`checks` holds `collect`, `digest` and `profile`, each `pass`, `warn` or
+`fail` with a one-line `detail`, and `outputs` holds the digest and the
+ratings. The tests run on the host with a made-up profile and fakes for the
+collector and the VM: `bash jobs/test-run-news-digest.sh` must end
+`passed=23 failed=0` and exit 0.

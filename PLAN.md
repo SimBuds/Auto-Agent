@@ -4,7 +4,9 @@ A plan for running [Hermes Agent](https://github.com/NousResearch/hermes-agent)
 (Nous Research) on this workstation, against the Local-LLM router, inside a
 QEMU virtual machine. Written 2026-09-25. **Status: installed and verified
 2026-09-25, updated and re-verified 2026-10-09 to 2026-10-20** (Hermes Agent
-`v0.21.6+337.g26610b0`, on `qwen`). No jobs are scheduled yet.
+`v0.21.6+337.g26610b0`, on `qwen`). No jobs are scheduled yet: each job is
+one host command that Casey runs by hand until the hub exists, and the hub
+calls after that (see *Scheduling*).
 
 Hermes is an agent that runs on a schedule or on demand, keeps memory between
 sessions, writes reusable "skills" from work that succeeded, and can report
@@ -48,9 +50,8 @@ approves every stage by hand.
    default, which rotates across free vendor tiers, so no key is stored and
    only public cat-product queries leave the VM. Each idea carries SEO-LLM's
    own fields (slug, type, suggested keywords, competitor URLs) plus why now,
-   a YMYL flag, and sources. Scheduling waits for two things: output worth
-   automating, and a decision on running Hermes's gateway daemon, which is
-   what runs its cron jobs, only while the VM is up.
+   a YMYL flag, and sources. It runs weekly as `jobs/run-topic-scout.sh`
+   (see *Scheduling*).
 
    Accepted 2026-09-26 after 18 hand runs (Phase 4). What held, and why:
    - **Two sessions, chained with `--oneshot`.** A research session (`web`
@@ -104,14 +105,13 @@ approves every stage by hand.
    race fix). This is the reading step of the update flow.
    Local-LLM's `scripts/llama-update build` and `swap` stay Casey's, and its
    `scripts/verify-build` runs on the host.
-4. **Router uptime watch.** The VM can reach `http://10.0.2.2:8080/health` and
-   `/models`, so Hermes can alert when the router is down. Neither endpoint
-   loads or wakes a model. It cannot see the host's kernel log, so it will not
-   catch a GPU fault (Xid), only its effect on the router.
+4. **Router uptime watch.** Dropped 2026-11-02: the hub checks the router
+   from the host. The number stays so references to #5 to #7 hold.
 5. **Company research for Jobhunt.** Given a company name from `jobhunt list`,
    a one-page brief from public sources: what they do, recent news, stack, red
    flags. Casey passes the names by hand, because the VM cannot see Jobhunt's
-   database. That is deliberate.
+   database. That is deliberate, and it stays hand-fed. Whether the hub may
+   pass company names into the VM is open (see *Open questions*).
 6. **Daily news digest from public APIs.** Added 2026-09-26, to build after
    the topic scout (#1) closes. Each day, one Markdown file of the day's
    posts, each rated on two scales:
@@ -194,16 +194,16 @@ approves every stage by hand.
    workstation. Topics start broad and Casey tunes them.
 
    Stocks and crypto items are information, not advice. Hermes never connects
-   to a brokerage or exchange account and never trades. "Daily" needs the same
-   scheduling decision as the other jobs. Until then it is a daily hand-run.
+   to a brokerage or exchange account and never trades. It runs daily as
+   `jobs/run-news-digest.sh` (see *Scheduling*).
 7. **Weekly routine that ends in a review queue.** Added 2026-09-26. One
    weekly run, at a quiet hour, that leaves everything waiting for Casey and
    takes no outward action. Each part runs where it belongs:
-   - **Jobhunt scan:** a weekly systemd user timer on the host runs
-     Jobhunt's own deterministic stages (ingest, discover, score) and writes
-     a "new matches" report. Hermes is not involved, because the stages are
-     already scripted and Jobhunt's database stays out of the VM. This is a
-     Jobhunt phase, planned in that repo.
+   - **Jobhunt scan:** the hub calls the `jobhunt` CLI on the host, which
+     runs Jobhunt's own deterministic stages and reports new matches to
+     Casey's review queue. Hermes is not involved, and Jobhunt's data stays
+     out of the VM. Jobhunt's planned SSH gate (2026-10-24) is superseded
+     (Jobhunt PLAN, *Automated caller*, 2026-11-01).
    - **Tailoring and autofill:** Casey triggers them for the matches he
      picks, as now.
    - **SEO-LLM ideas:** the topic scout (#1).
@@ -217,12 +217,38 @@ approves every stage by hand.
    Submit), approving SEO-LLM brief stages (they are its quality control),
    and anything needing Casey's Ahrefs or Search Console logins. The router
    holds one model at a time, so the parts run one after another, not in
-   parallel. Blocked on the same scheduling decision as the other jobs.
+   parallel. The hub runs them (see *Scheduling*).
 
 Suggested order: start with #1, which needs no repo access, touches nothing
-outward, and feeds a pipeline already in use. Add #3 or #4 once Hermes has been
-seen behaving on `qwen`. #6 comes after #1 closes, and #7 once scheduling
-is decided.
+outward, and feeds a pipeline already in use. Add #3 once Hermes has been
+seen behaving on `qwen`. #6 came after #1 closed, and #7 comes with the hub.
+
+---
+
+## Scheduling
+
+Decided 2026-11-02. A hub service in its own repository (an API, Postgres
+and n8n, bound to 127.0.0.1) will schedule the jobs. It does not exist yet.
+
+- **Each job is one non-interactive host command with a stable contract:**
+  `jobs/run-topic-scout.sh` (weekly) and `jobs/run-news-digest.sh` (daily).
+  They share one exit contract with Jobhunt and SEO-LLM: 0 ok, 2 usage, 10
+  input or config, 11 needs a person, 12 a stage failed, 13 a service the run
+  needs is down, 14 busy. Each writes `out/<job>/status.json`. The README's
+  *Run it unattended* sections have the details.
+- **Until the hub exists, Casey runs them by hand,** the scout weekly and the
+  news daily. After that, the hub's host runner calls them from the repo
+  root, starts each under `setsid`, stops one by its process group, and
+  retries only on 13 and 14.
+- **No Hermes gateway and no cron in the VM.** The caller lives on the host.
+  The runners drive Hermes the way a hand-run does (copy in, run over SSH on
+  port 22220, copy out), and never start or stop the VM, take snapshots, or
+  change Hermes's config.
+- **Hermes never calls the hub,** holds no hub token, and never sees Jobhunt
+  or SEO-LLM data. Every output still ends in a file Casey reviews.
+- **The runners need an SSH key for `hermes@localhost`,** because they never
+  prompt. Installing it is Casey's (README setup, step 10). Installed
+  2026-11-03.
 
 ---
 
@@ -232,7 +258,7 @@ is decided.
   no resume or job data leaves this hardware. A Telegram, Discord, or Slack
   gateway sends Hermes's output through that platform's servers. Keep anything
   Jobhunt-related as local files, or limit the gateway to the public-data jobs
-  (1 to 4). Setting up a gateway (bot tokens, accounts) is Casey's to do.
+  (1 to 3). Setting up a gateway (bot tokens, accounts) is Casey's to do.
 - **No publishing, submitting, or pushing.** Hermes does not post to WordPress,
   submit applications, or push to git. Every project reserves outward-facing
   actions for Casey, and an agent with self-written skills is not the exception.
@@ -248,7 +274,9 @@ is decided.
 - **The VM can reach every service on the host's loopback,** not only the
   router. On 2026-09-25 that was the router (8080), CUPS (631), and several
   ports held by VS Code. The router-only network variant at the end of the setup
-  guide closes that, at the cost of internet access.
+  guide closes that, at the cost of internet access. The hub will listen there
+  too, so it must require auth on every route, even though Hermes never calls
+  it. Setup step 11 is unaffected.
 - **Hermes runs commands without asking.** With the terminal backend on
   `local`, a terminal tool call runs in the VM with no approval prompt
   (observed 2026-09-25 on `uname -r`). Hermes does scan commands (its
@@ -384,6 +412,8 @@ at the router, snapshots, everyday use, removal) is in
 - How does Hermes's context compaction behave against the router's HTTP 400 on
   an oversized request?
 - How much does thinking cost on a long job, compared with thinking off?
+- May the hub pass company names into the VM for Good fits #5? Until Casey
+  decides, the company research stays hand-fed. Open since 2026-11-02.
 - Answered 2026-09-25: Hermes makes no model calls while idle (see *How the
   router serves Hermes*), and Hermes sends thinking on by default.
 

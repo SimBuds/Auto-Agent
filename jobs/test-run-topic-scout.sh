@@ -67,6 +67,35 @@ out=$(run 2>&1); rc=$?
 n=$(ls "$R/out/scout/topic-scout-$(date +%F)-"*Z.md | wc -l)
 [ $rc -eq 0 ] && [ "$n" -eq 2 ] && [ -f "$P" ] && ok "second run: a second file, the first kept" || bad "second run" "rc=$rc n=$n"
 
+# --- the runner starts today's FILE and LEFT before research, because Hermes
+# may skip the prompt's step 1 and add to an earlier run's file (Phase 22) ---
+D=$(date +%F)
+found() { grep '^research found' "$FAKE_CALLS"; }
+fresh
+out=$(run 2>&1); rc=$?
+[ $rc -eq 0 ] && [ "$(found)" = "research found FILE: # Topic scout $D| LEFT bytes: 0" ] \
+  && ok "first run of the day: research finds the title line and an empty LEFT" || bad "first run start" "rc=$rc $(found)"
+
+fresh
+mkdir -p "$FAKE_VM/scout"
+printf '# Topic scout %s\n\n## 1. STALE-IDEA-MARKER\n' "$D" > "$FAKE_VM/scout/topic-scout-$D.md"
+echo 'Left out: STALE-LEFT-MARKER' > "$FAKE_VM/scout/left-out-$D.txt"
+echo 'YESTERDAY-MARKER' > "$FAKE_VM/scout/topic-scout-2026-01-01.md"
+out=$(run 2>&1); rc=$?
+[ $rc -eq 0 ] && [ "$(found)" = "research found FILE: # Topic scout $D| LEFT bytes: 0" ] \
+  && ! grep -rq 'STALE-IDEA-MARKER' "$R/out/scout" \
+  && ok "an earlier run today: research starts fresh, no stale idea pulled" || bad "stale file" "rc=$rc $(found)"
+[ "$(cat "$FAKE_VM/scout/topic-scout-2026-01-01.md")" = YESTERDAY-MARKER ] \
+  && ok "an earlier day's file is left alone" || bad "earlier day" "$(ls -l "$FAKE_VM/scout")"
+grep -q "plan: 3 .*start today's FILE and LEFT empty" "$R/out/scout/run.log" \
+  && ok "log: plan line 3 names the reset" || bad "plan 3" "$(grep 'plan: 3' "$R/out/scout/run.log")"
+
+fresh
+mkdir -p "$FAKE_VM/scout/topic-scout-$D.md"   # a directory: the reset cannot write it
+out=$(run 2>&1); rc=$?
+[ $rc -eq 12 ] && [ "$(j "$S" 'd["stop_reason"]')" = failed ] && ! grep -q '^hermes ' "$FAKE_CALLS" \
+  && ok "the reset fails: exit 12, no session runs" || bad "reset fails" "rc=$rc $(grep '^hermes' "$FAKE_CALLS")"
+
 # --- lock held: exit 14, nothing run or written ---
 fresh
 mkdir -p "$R/out/scout"

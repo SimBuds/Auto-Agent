@@ -25,7 +25,7 @@ log "run $JOB started, pid $$"
 log "plan: 0 check the local job files, SSH to the VM, and the router from the VM"
 log "plan: 1 make ~/jobs and ~/scout in the VM"
 log "plan: 2 copy topic-scout.md, topic-scout-sweep.md, topic-scout-seen.txt, add-idea.sh to ~/jobs"
-log "plan: 3 read the VM's date and list its skills"
+log "plan: 3 read the VM's date, start today's FILE and LEFT empty, and list its skills"
 log "plan: 4 research session (toolsets web,terminal)"
 log "plan: 5 sweep session (toolsets terminal)"
 log "plan: 6 diff the VM's skills against step 3"
@@ -47,6 +47,9 @@ step "copy job files" "${SCP[@]}" jobs/topic-scout.md jobs/topic-scout-sweep.md 
 DATE=$("${SSH[@]}" 'date +%F' 2>>"$LOG")
 log "VM date: '$DATE'"
 [[ $DATE =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || finish 12 failed
+# The prompt's step 1, run here as well: in Phase 22 Hermes skipped it on a
+# second run the same day, kept the earlier ideas and stopped at 11 or 12.
+step "start FILE and LEFT" "${SSH[@]}" "printf '# Topic scout %s\\n' $DATE > ~/scout/topic-scout-$DATE.md && : > ~/scout/left-out-$DATE.txt" || finish 12 failed
 
 step "list skills" "${SSH[@]}" 'find ~/.hermes/skills -name SKILL.md | sort > ~/scout/skills-before.txt' || finish 12 failed
 session research "web,terminal" '~/jobs/topic-scout.md'

@@ -46,7 +46,13 @@ printf 'Query: '; cat "$q"
 case $q in
   */topic-scout.md)
     [ -e "$FAKE_REPO/out/scout/status.json" ] && echo "status.json present during research" >> "$FAKE_CALLS"
-    cp "$FAKE_FIXTURE" "$HOME/scout/topic-scout-$(date +%F).md"
+    # What the session found, before it writes: the real one may skip the
+    # prompt's step 1 and add to whatever is there (Phase 22, batch 1).
+    f="$HOME/scout/topic-scout-$(date +%F).md" l="$HOME/scout/left-out-$(date +%F).txt"
+    if [ -e "$f" ]; then saw=$(tr '\n' '|' < "$f"); else saw=none; fi
+    if [ -e "$l" ]; then left=$(wc -c < "$l"); else left=none; fi
+    echo "research found FILE: $saw LEFT bytes: $left" >> "$FAKE_CALLS"
+    cp "$FAKE_FIXTURE" "$f"
     [ "$FAKE_BLOCK" = research ] && echo "  ┊ 💻 \$ cat <<'X' | bash  BLOCKED: single-query mode (-q) runs without a user present to approve it"
     [ "$FAKE_NEW_SKILL" = 1 ] && mkdir -p "$HOME/.hermes/skills/scout-tricks" && touch "$HOME/.hermes/skills/scout-tricks/SKILL.md"
     [ "$FAKE_ROUTER_DIES" = 1 ] && touch "$FAKE_ROUTER_DOWN"

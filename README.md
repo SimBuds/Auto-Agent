@@ -418,7 +418,10 @@ In order, it:
 - logs its plan
 - checks its job files, SSH to the VM, and the router from inside the VM
   (setup step 5's two `curl` checks, with `qwen` listed)
-- runs steps 1 to 4, reading the date from the VM
+- runs steps 1 to 4, reading the date from the VM. Before research it starts
+  today's file and `left-out-DATE.txt` empty itself, as the prompt's step 1
+  does, because on 2026-11-03 Hermes skipped that step on a second run the
+  same day and added to the earlier run's ideas
 - pulls today's file to `out/scout/topic-scout-DATE-HHMMSSZ.md` (the time is
   UTC), so a second run on the same day keeps the first file
 - writes `out/scout/status.json` and exits
@@ -507,7 +510,7 @@ wait "$RUN"; echo "exit=$?"   # 143
 ```
 
 The tests run on the host with fakes for the VM, never against it:
-`bash jobs/test-run-topic-scout.sh` must end `passed=35 failed=0` and exit 0.
+`bash jobs/test-run-topic-scout.sh` must end `passed=40 failed=0` and exit 0.
 
 ## Job: news digest
 

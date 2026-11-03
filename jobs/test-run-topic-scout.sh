@@ -193,6 +193,19 @@ out=$(FAKE_URL_CODES="https://example.org/window-perch-setup=403" run 2>&1); rc=
 [ $rc -eq 0 ] && [ "$(j "$S" '[c["result"] + " " + c["detail"] for c in d["checks"] if c["id"] == "urls"][0]')" = "warn 5 OK, 1 UNVERIFIED, 0 DEAD" ] \
   && ok "an UNVERIFIED URL: warn, exit 0" || bad "unverified URL" "rc=$rc $(cat "$S" 2>&1)"
 
+# A 5xx is the server's own fault, not a gone page: in Phase 22 three 500s
+# answered 200 half an hour later.
+fresh
+out=$(FAKE_URL_CODES="https://example.org/window-perch-setup=500 https://example.net/cat-puzzle-toys=503" run 2>&1); rc=$?
+[ $rc -eq 0 ] && [ "$(j "$S" '[c["result"] + " " + c["detail"] for c in d["checks"] if c["id"] == "urls"][0]')" = "warn 4 OK, 2 UNVERIFIED, 0 DEAD" ] \
+  && grep -q '^UNVERIFIED 500 ' "$R/out/scout/run.log" && grep -q '^UNVERIFIED 503 ' "$R/out/scout/run.log" \
+  && ok "500 and 503: UNVERIFIED, warn, exit 0" || bad "5xx" "rc=$rc $(cat "$S" 2>&1)"
+
+fresh
+out=$(FAKE_URL_CODES="https://example.org/window-perch-setup=000" run 2>&1); rc=$?
+[ $rc -eq 12 ] && [ "$(j "$S" '[c["result"] + " " + c["detail"] for c in d["checks"] if c["id"] == "urls"][0]')" = "fail 5 OK, 0 UNVERIFIED, 1 DEAD" ] \
+  && ok "no answer (000): DEAD, exit 12" || bad "000" "rc=$rc $(cat "$S" 2>&1)"
+
 fresh
 out=$(FAKE_NEW_SKILL=1 run 2>&1); rc=$?
 [ $rc -eq 0 ] && [ "$(j "$S" 'd["checks"][0]["id"], d["checks"][0]["result"]')" = "skills warn" ] \

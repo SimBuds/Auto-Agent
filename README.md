@@ -365,13 +365,14 @@ bash jobs/check-scout.sh fields "$F"
 Then check that each competitor URL exists. Each line is labelled:
 
 - `OK`: the page answered (200 to 399).
-- `DEAD`: 404, 410, or no answer (`000`). The URL was probably made up, or
-  the page is gone. Drop it.
-- `UNVERIFIED`: 401, 402, 403 or 429. The site blocks scripts, and on
+- `DEAD`: any other code, mostly 404, 410, or no answer (`000`). The URL was
+  probably made up, or the page is gone. Drop it.
+- `UNVERIFIED`: 401, 402, 403, 429 or any 5xx. The site blocks scripts, and on
   2026-09-26 catster.com, nytimes.com (Wirecutter), consumerreports.org,
   purina.com and dailypaws.com answered 403 or 402 even for a made-up path.
-  So this code proves nothing either way. Open these in a browser before
-  using the idea.
+  A 5xx is the server's own error: on 2026-11-03 three pages that answered
+  500 answered 200 half an hour later. So these codes prove nothing either
+  way. Open these in a browser before using the idea.
 
 ```bash
 # Runs in: local terminal, host, in this repo. One request per URL, two seconds apart.
@@ -510,7 +511,7 @@ wait "$RUN"; echo "exit=$?"   # 143
 ```
 
 The tests run on the host with fakes for the VM, never against it:
-`bash jobs/test-run-topic-scout.sh` must end `passed=40 failed=0` and exit 0.
+`bash jobs/test-run-topic-scout.sh` must end `passed=42 failed=0` and exit 0.
 
 ## Job: news digest
 

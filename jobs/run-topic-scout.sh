@@ -86,8 +86,9 @@ DETAIL=$(printf '%s\n' "$RESULT" | tail -n 2 | head -n 1)
 if [ $RC -eq 0 ]; then CHECKS+=("fields	pass	$DETAIL"); else CHECKS+=("fields	fail	$DETAIL"); fi
 log "field check exit=$RC"
 
-# DEAD is a made-up or gone page. UNVERIFIED is a site that blocks scripts,
-# which proves nothing either way, so a person opens it in a browser.
+# DEAD is a made-up or gone page. UNVERIFIED is a site that blocks scripts or
+# a server error (5xx), which proves nothing either way, so a person opens it
+# in a browser.
 log "step: URL check"
 RESULT=$(bash jobs/check-scout.sh urls "$FILE" 2>&1)
 URC=$?

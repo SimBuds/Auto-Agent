@@ -86,9 +86,9 @@ fi
 awk '/^- Competitors:/{c=1;next} /^- /{c=0} c && /^  - https?:/{print $2}' "$F" | while read -r url; do
   code=$(curl -sIL -o /dev/null -w '%{http_code}' --max-time 15 "$url")
   case "$code" in
-    2??|3??)         label=OK ;;
-    401|402|403|429) label=UNVERIFIED ;;
-    *)               label=DEAD ;;
+    2??|3??)             label=OK ;;
+    401|402|403|429|5??) label=UNVERIFIED ;;
+    *)                   label=DEAD ;;
   esac
   echo "$label $code $url"
   sleep 2

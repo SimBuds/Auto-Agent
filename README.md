@@ -423,6 +423,7 @@ replies included, is appended to `out/scout/run.log`. Follow a run with
 | 12 | A step failed, the sweep found no file, the field check failed, or a URL is DEAD. Read `run.log` | Written |
 | 13 | The VM did not answer SSH (`vm`), or the router is down or not serving `qwen` (`router`). Run again later | Written |
 | 14 | Another Hermes job holds the lock. Nothing was run or written | None |
+| 143 | Stopped by SIGTERM (see below) | Written |
 | 2 | Called with an argument | None |
 
 A refusal outranks a later failure or a pass, because only a person can
@@ -459,7 +460,7 @@ killed or crashed. Its keys follow SEO-LLM's `status.json`:
 | Key | What it holds |
 | --- | --- |
 | `job`, `exit_code` | The job, and the same exit code the process returned |
-| `stop_reason` | `input` or `hermes_not_on_path` (10), `decision` (11), `failed` (12), `vm` or `router` (13), or `null` when it finished |
+| `stop_reason` | `input` or `hermes_not_on_path` (10), `decision` (11), `failed` (12), `vm` or `router` (13), `terminated` (143), or `null` when it finished |
 | `finished_at` | When the file was written, in UTC |
 | `outputs` | The pulled file's absolute path, or an empty list when none was pulled |
 | `checks` | `sweep` (only when it found no file), `skills`, `fields` and `urls`, each with `result` `pass`, `warn` or `fail` and a one-line `detail` |
@@ -467,9 +468,26 @@ killed or crashed. Its keys follow SEO-LLM's `status.json`:
 | `reason` | On 11 only: the session and the line the scanner refused |
 | `log` | The absolute path to `run.log` |
 
-Every key is always present. The tests run on the host with fakes for the VM,
-never against it: `bash jobs/test-run-topic-scout.sh` must end
-`passed=29 failed=0` and exit 0.
+Every key is always present.
+
+To stop a run, send SIGTERM to its process group, which is how the hub stops
+one. Start it with `setsid` so the group is its own. The runner stops the
+Hermes session in the VM over a fresh SSH, writes `status.json` with exit
+`143` and `stop_reason` `terminated`, and exits `143`. The lock goes when its
+last process exits. Killing only the ssh client is not enough: a command with
+no terminal keeps running in the VM after its client goes away, still holding
+the GPU. Each session therefore runs in its own process group in the VM, with
+the group's id in `~/scout/.hermes.pgid` while it runs.
+
+```bash
+# Runs in: local terminal, host, in this repo.
+setsid bash jobs/run-topic-scout.sh & RUN=$!
+kill -TERM -- "-$RUN"   # later, to stop it
+wait "$RUN"; echo "exit=$?"   # 143
+```
+
+The tests run on the host with fakes for the VM, never against it:
+`bash jobs/test-run-topic-scout.sh` must end `passed=32 failed=0` and exit 0.
 
 ## Job: news digest
 

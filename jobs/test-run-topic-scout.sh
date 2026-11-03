@@ -35,6 +35,7 @@ cat > "$T/bin/scp" <<'EOF'
 # fake scp: hermes@localhost:PATH is PATH under the fake VM home
 while [ $# -gt 0 ]; do case $1 in -P|-o) shift 2 ;; -*) shift ;; *) break ;; esac; done
 echo "scp $*" >> "$FAKE_CALLS"
+[ "$FAKE_HANG" = copy ] && /usr/bin/sleep 300
 args=()
 for a in "$@"; do args+=("${a/#hermes@localhost:/$FAKE_VM/}"); done
 cp "${args[@]}"
@@ -55,10 +56,12 @@ case $q in
     [ "$FAKE_BLOCK" = research ] && echo "  ┊ 💻 \$ cat <<'X' | bash  BLOCKED: single-query mode (-q) runs without a user present to approve it"
     [ "$FAKE_NEW_SKILL" = 1 ] && mkdir -p "$HOME/.hermes/skills/scout-tricks" && touch "$HOME/.hermes/skills/scout-tricks/SKILL.md"
     [ "$FAKE_ROUTER_DIES" = 1 ] && touch "$FAKE_ROUTER_DOWN"
+    [ "$FAKE_HANG" = research ] && exec /usr/bin/sleep 300
     echo "research reply"
     exit "${FAKE_RESEARCH_RC:-0}" ;;
   */topic-scout-sweep.md)
     [ "$FAKE_BLOCK" = sweep ] && echo "Nested executable body could not be resolved"
+    [ "$FAKE_HANG" = sweep ] && exec /usr/bin/sleep 300
     if [ "$FAKE_SWEEP_MISSING" = 1 ]; then echo "FILE missing: ~/scout/topic-scout-2099-01-01.md"; else echo "sweep reply"; fi ;;
 esac
 EOF
@@ -232,6 +235,38 @@ out=$(FAKE_NEW_SKILL=1 run 2>&1); rc=$?
 [ $rc -eq 0 ] && [ "$(j "$S" 'd["checks"][0]["id"], d["checks"][0]["result"]')" = "skills warn" ] \
   && [[ $(j "$S" 'd["checks"][0]["detail"]') == "1 new, 0 removed."*"/scout-tricks/SKILL.md" ]] \
   && ok "a new skill: warn naming it, exit 0" || bad "new skill" "rc=$rc $(cat "$S" 2>&1)"
+
+# --- SIGTERM: the hub starts each run with setsid and stops it by process group ---
+# term_at WHERE PATTERN: starts a run whose fake hangs at WHERE, waits for
+# PATTERN in the call log, then sends TERM to the run's group as the hub will.
+term_at() {
+  local i
+  fresh
+  FAKE_HANG=$1 PATH="$T/bin:$PATH" setsid bash "$R/jobs/run-topic-scout.sh" >"$T/term.out" 2>&1 &
+  RUN=$!
+  for i in $(seq 100); do grep -q "$2" "$FAKE_CALLS" && break; /usr/bin/sleep 0.1; done
+  HPG=$(cat "$FAKE_VM/scout/.hermes.pgid" 2>/dev/null)
+  /usr/bin/sleep 0.3
+  kill -TERM -- "-$RUN"
+  wait "$RUN"
+  RC=$?
+  for i in $(seq 30); do [ -z "$HPG" ] || ! pgrep -g "$HPG" >/dev/null && break; /usr/bin/sleep 0.1; done
+}
+lock_free() { flock -n "$R/out/.hermes-run.lock" true; }
+hermes_gone() { ! pgrep -g "$HPG" >/dev/null; }
+
+for where in research sweep; do
+  term_at "$where" "^hermes topic-scout"$([ "$where" = sweep ] && echo -sweep)".md"
+  [ -n "$HPG" ] && [ $RC -eq 143 ] && [ "$(stop)" = "143 terminated" ] && hermes_gone && lock_free \
+    && grep -q '^stopped Hermes process group' "$R/out/scout/run.log" \
+    && ok "SIGTERM in $where: Hermes stopped in the VM, lock free, status 143 terminated" \
+    || bad "SIGTERM in $where" "HPG=$HPG rc=$RC alive=$(pgrep -g "${HPG:-0}" | wc -l) $(cat "$S" 2>&1 | head -3)"
+  [ -n "$HPG" ] && pgrep -g "$HPG" >/dev/null && kill -KILL -- "-$HPG"
+done
+
+term_at copy "^scp .*add-idea.sh"
+[ $RC -eq 143 ] && [ "$(stop)" = "143 terminated" ] && lock_free && ! grep -q 'kill -TERM' "$FAKE_CALLS" \
+  && ok "SIGTERM during the copy: status 143, no remote stop tried" || bad "SIGTERM in copy" "rc=$RC $(cat "$FAKE_CALLS")"
 
 echo "passed=$pass failed=$fail"
 rm -rf "$T"

@@ -21,9 +21,19 @@ VM=hermes@localhost
 # The README's commands, plus BatchMode so a missing key fails instead of prompting.
 SSH=(ssh -p 22220 -o BatchMode=yes -o ConnectTimeout=10 "$VM")
 SCP=(scp -P 22220 -o BatchMode=yes -o ConnectTimeout=10)
-# A non-interactive SSH command gets the VM's system PATH, which lacks
+# Each Hermes session runs in its own process group in the VM, with the group's
+# id in ~/scout/.hermes.pgid, because sshd does not signal a command that has no
+# terminal when the client goes away, so a stopped run must stop Hermes itself.
+# A command run over SSH also gets the VM's system PATH, which lacks
 # ~/.local/bin, where the installer put hermes (NOT FOUND without it, 2026-11-03).
-HERMES='PATH="$HOME/.local/bin:$PATH" hermes'
+# printf fills in the toolsets and the query file.
+SESSION_CMD='rm -f ~/scout/.hermes.pgid
+setsid -w sh -c '\''echo $$ > ~/scout/.hermes.pgid; export PATH="$HOME/.local/bin:$PATH"; exec hermes chat --oneshot --toolsets "$0" --query-file "$1"'\'' %s %s
+rc=$?; rm -f ~/scout/.hermes.pgid; exit $rc'
+# Waits up to 3 seconds for a session that is still starting to record its group.
+STOP_CMD='f=~/scout/.hermes.pgid
+for i in 1 2 3; do [ -s "$f" ] && break; sleep 1; done
+if [ -s "$f" ]; then kill -TERM -- "-$(cat "$f")" && echo "stopped Hermes process group $(cat "$f")"; rm -f "$f"; else echo "no Hermes session to stop"; fi'
 ROUTER=http://10.0.2.2:8080
 
 # One lock for every Hermes job, because they share the VM and the GPU. The
@@ -40,6 +50,7 @@ OUTPUTS=()
 CHECKS=()    # one "id<TAB>result<TAB>detail" entry per check
 MISSING=()   # on 10, one "path<TAB>message" entry per input, path empty when there is none
 REASON=""    # the first line Hermes's scanner refused, which makes the run an 11
+IN_SESSION=""  # set while a Hermes session runs in the VM
 
 log() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" | tee -a "$LOG"; }
 
@@ -116,8 +127,14 @@ router_up() {
 session() {
   local name=$1 start rc line
   start=$(stat -c %s "$LOG")
-  step "$name" "${SSH[@]}" "$HERMES chat --oneshot --toolsets \"$2\" --query-file $3"
+  log "step: $name"
+  # In the background, so a SIGTERM runs on_term at once, not after the session.
+  IN_SESSION=1
+  "${SSH[@]}" "$(printf "$SESSION_CMD" "$2" "$3")" >>"$LOG" 2>&1 &
+  wait $!
   rc=$?
+  IN_SESSION=""
+  log "$name exit=$rc"
   SESSION_OUTPUT=$(tail -c +$((start + 1)) "$LOG")
   line=$(grep -m 1 -e 'BLOCKED' -e 'could not be resolved' <<<"$SESSION_OUTPUT" | sed 's/^[[:space:]]*//' | cut -c 1-300)
   if [ -n "$line" ] && [ -z "$REASON" ]; then
@@ -133,6 +150,20 @@ session() {
   case $? in 1) finish 13 router ;; 2) finish 13 vm ;; esac
   finish 12 failed
 }
+
+# on_term: a caller stops a run with SIGTERM to its process group. Stop the
+# Hermes session in the VM too, then record the stop. The lock goes when the
+# run's last process exits.
+on_term() {
+  trap '' TERM
+  log "SIGTERM received"
+  if [ -n "$IN_SESSION" ]; then
+    "${SSH[@]}" "$STOP_CMD" >>"$LOG" 2>&1
+    log "stop Hermes exit=$?"
+  fi
+  finish 143 terminated
+}
+trap on_term TERM
 
 log "run $JOB started, pid $$"
 log "plan: 0 check the local job files, SSH to the VM, and the router from the VM"

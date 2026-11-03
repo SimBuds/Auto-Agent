@@ -1,14 +1,17 @@
 #!/bin/bash
 # Tests for run-topic-scout.sh. Run on the host from the repo: bash jobs/test-run-topic-scout.sh
 # Each test copies jobs/ into a temp repo and runs the runner there, so the real
-# out/ is never written. Fakes on PATH stand in for the VM: ssh and scp run the
-# remote side locally with a temp dir as the VM's home, hermes writes the
-# fixture scout file, and curl answers 200. No network, no VM, no router.
+# out/ is never written. Fakes stand in for the VM: ssh and scp run the remote
+# side locally with a temp dir as the VM's home, hermes (only in that home's
+# ~/.local/bin, as in the VM) writes the fixture scout file, and curl answers
+# as the router or a competitor page. FAKE_* variables pick the failure.
+# No network, no VM, no router.
 JOBS="$(cd "$(dirname "$0")" && pwd)"
 T=$(mktemp -d)
 R="$T/repo"            # the temp repo the runner runs in
 export FAKE_VM="$T/vm" FAKE_CALLS="$T/calls" FAKE_REPO="$R"
 export FAKE_FIXTURE="$JOBS/fixtures/scout/topic-scout.md"
+export FAKE_ROUTER_DOWN="$T/router-down"   # the router is down while this file exists
 pass=0; fail=0
 ok()  { echo "PASS $1"; pass=$((pass+1)); }
 bad() { echo "FAIL $1: $2"; fail=$((fail+1)); }
@@ -20,6 +23,11 @@ cat > "$T/bin/ssh" <<'EOF'
 while [ $# -gt 0 ]; do case $1 in -p|-o) shift 2 ;; -*) shift ;; *) break ;; esac; done
 shift
 echo "ssh $*" >> "$FAKE_CALLS"
+case $FAKE_SSH in
+  denied) echo "hermes@localhost: Permission denied (publickey,password)." >&2; exit 255 ;;
+  down)   echo "ssh: connect to host localhost port 22220: Connection refused" >&2; exit 255 ;;
+  127)    [[ $* == *"hermes chat"* ]] && { echo "bash: line 1: hermes: command not found" >&2; exit 127; } ;;
+esac
 HOME=$FAKE_VM bash -c "$*"
 EOF
 cat > "$T/bin/scp" <<'EOF'
@@ -33,29 +41,49 @@ cp "${args[@]}"
 EOF
 cat > "$T/bin/hermes" <<'EOF'
 #!/bin/bash
-# fake hermes: research writes the fixture as today's file, the sweep only replies
+# fake hermes: echoes the query as the real one does, then research writes the
+# fixture as today's file and the sweep only replies
 q=""
 while [ $# -gt 0 ]; do [ "$1" = --query-file ] && q=$2; shift; done
 echo "hermes $(basename "$q")" >> "$FAKE_CALLS"
 [ -f "$q" ] || { echo "no query file $q" >&2; exit 1; }
+printf 'Query: '; cat "$q"
 case $q in
   */topic-scout.md)
     [ -e "$FAKE_REPO/out/scout/status.json" ] && echo "status.json present during research" >> "$FAKE_CALLS"
     cp "$FAKE_FIXTURE" "$HOME/scout/topic-scout-$(date +%F).md"
+    [ "$FAKE_BLOCK" = research ] && echo "  ┊ 💻 \$ cat <<'X' | bash  BLOCKED: single-query mode (-q) runs without a user present to approve it"
+    [ "$FAKE_NEW_SKILL" = 1 ] && mkdir -p "$HOME/.hermes/skills/scout-tricks" && touch "$HOME/.hermes/skills/scout-tricks/SKILL.md"
+    [ "$FAKE_ROUTER_DIES" = 1 ] && touch "$FAKE_ROUTER_DOWN"
     echo "research reply"
     exit "${FAKE_RESEARCH_RC:-0}" ;;
   */topic-scout-sweep.md)
-    echo "sweep reply" ;;
+    [ "$FAKE_BLOCK" = sweep ] && echo "Nested executable body could not be resolved"
+    if [ "$FAKE_SWEEP_MISSING" = 1 ]; then echo "FILE missing: ~/scout/topic-scout-2099-01-01.md"; else echo "sweep reply"; fi ;;
 esac
 EOF
-printf '#!/bin/bash\nprintf 200\n' > "$T/bin/curl"
+cat > "$T/bin/curl" <<'EOF'
+#!/bin/bash
+# fake curl: the router's two endpoints, or a competitor page's status code
+url=${!#}
+case $url in
+  */health)    [ -e "$FAKE_ROUTER_DOWN" ] && exit 7; echo '{"status":"ok"}' ;;
+  */v1/models) [ -e "$FAKE_ROUTER_DOWN" ] && exit 7
+               if [ "$FAKE_NO_QWEN" = 1 ]; then echo '{"data":[{"id":"gemma"}]}'; else echo '{"data":[{"id":"gemma"},{"id":"qwen"}]}'; fi ;;
+  *)           code=200
+               for m in $FAKE_URL_CODES; do [ "${m%=*}" = "$url" ] && code=${m##*=}; done
+               printf %s "$code" ;;
+esac
+EOF
 printf '#!/bin/bash\nexit 0\n' > "$T/bin/sleep"
 chmod +x "$T/bin/"*
+mv "$T/bin/hermes" "$T/hermes"
 
 fresh() {  # a clean temp repo, fake VM and call log
-  rm -rf "$R" "$FAKE_VM" "$FAKE_CALLS"
-  mkdir -p "$R" "$FAKE_VM/.hermes/skills/demo"
+  rm -rf "$R" "$FAKE_VM" "$FAKE_CALLS" "$FAKE_ROUTER_DOWN"
+  mkdir -p "$R" "$FAKE_VM/.hermes/skills/demo" "$FAKE_VM/.local/bin"
   touch "$FAKE_VM/.hermes/skills/demo/SKILL.md" "$FAKE_CALLS"
+  cp "$T/hermes" "$FAKE_VM/.local/bin/hermes"
   cp -r "$JOBS" "$R/jobs"
   # A fixed seen list, so changes to the live one cannot move the results.
   printf '# Fixture seen list\n\ncat-water-fountain\n' > "$R/jobs/topic-scout-seen.txt"
@@ -83,9 +111,9 @@ out=$(run 2>&1); rc=$?
 P=$(j "$S" '"\n".join(d["outputs"])')
 [[ $P == "$R/out/scout/topic-scout-$(date +%F)-"[0-9][0-9][0-9][0-9][0-9][0-9]Z.md ]] && cmp -s "$P" "$FAKE_FIXTURE" \
   && ok "status: outputs holds the pulled file" || bad "outputs" "P=$P"
-[ "$(j "$S" '"|".join(c["id"] + " " + c["result"] for c in d["checks"])')" = "fields pass|urls pass" ] \
-  && [ "$(j "$S" 'd["checks"][1]["detail"]')" = "6 OK, 0 UNVERIFIED, 0 DEAD" ] \
-  && ok "status: fields and urls pass" || bad "checks" "$(j "$S" 'd["checks"]')"
+[ "$(j "$S" '"|".join(c["id"] + " " + c["result"] for c in d["checks"])')" = "skills pass|fields pass|urls pass" ] \
+  && [ "$(j "$S" 'd["checks"][2]["detail"]')" = "6 OK, 0 UNVERIFIED, 0 DEAD" ] \
+  && ok "status: skills, fields and urls pass" || bad "checks" "$(j "$S" 'd["checks"]')"
 [ "$(j "$S" 'd["log"]')" = "$R/out/scout/run.log" ] && ok "status: log path" || bad "log path" "$(j "$S" 'd["log"]')"
 ! grep -q "status.json present" "$FAKE_CALLS" && ok "old status.json deleted before research" || bad "stale status" "$(cat "$FAKE_CALLS")"
 first_plan=$(grep -n 'plan: 1' "$R/out/scout/run.log" | cut -d: -f1)
@@ -122,6 +150,88 @@ out=$(FAKE_RESEARCH_RC=1 run 2>&1); rc=$?
 [ $rc -eq 12 ] && [ "$(j "$S" 'd["exit_code"], d["stop_reason"], d["outputs"]')" = "12 failed []" ] \
   && ! grep -q '^hermes topic-scout-sweep' "$FAKE_CALLS" \
   && ok "research fails: exit 12, status failed, no sweep" || bad "research fails" "rc=$rc $(cat "$S" 2>&1)"
+
+# --- failures sorted into 10, 11, 12 and 13 ---
+stop() { j "$S" 'd["exit_code"], d["stop_reason"]'; }
+hermes_ran() { grep -q '^hermes ' "$FAKE_CALLS"; }
+# A finished scout file whose summary miscounts its ideas, so the field check fails.
+sed 's/^- Ideas: 2$/- Ideas: 3/' "$FAKE_FIXTURE" > "$T/miscount.md"
+
+fresh
+rm "$R/jobs/topic-scout-sweep.md"
+out=$(run 2>&1); rc=$?
+[ $rc -eq 10 ] && [ "$(stop)" = "10 input" ] && [ "$(j "$S" 'd["missing"][0]["path"]')" = "$R/jobs/topic-scout-sweep.md" ] \
+  && [ ! -s "$FAKE_CALLS" ] && ok "job file missing: exit 10, path named, VM untouched" || bad "job file missing" "rc=$rc $(cat "$S" 2>&1)"
+
+fresh
+out=$(FAKE_SSH=denied run 2>&1); rc=$?
+[ $rc -eq 10 ] && [ "$(stop)" = "10 input" ] && [ "$(j "$S" 'd["missing"][0]["path"]')" = None ] \
+  && [[ $(j "$S" 'd["missing"][0]["message"]') == "no SSH key for hermes@localhost"* ]] \
+  && ok "no SSH key: exit 10, missing says so" || bad "no SSH key" "rc=$rc $(cat "$S" 2>&1)"
+
+fresh
+out=$(FAKE_SSH=down run 2>&1); rc=$?
+[ $rc -eq 13 ] && [ "$(stop)" = "13 vm" ] && ! hermes_ran && ok "VM down: exit 13 vm" || bad "VM down" "rc=$rc $(cat "$S" 2>&1)"
+
+fresh
+touch "$FAKE_ROUTER_DOWN"
+out=$(run 2>&1); rc=$?
+[ $rc -eq 13 ] && [ "$(stop)" = "13 router" ] && ! hermes_ran && ok "router down: exit 13 router, no session" || bad "router down" "rc=$rc $(cat "$S" 2>&1)"
+
+fresh
+out=$(FAKE_NO_QWEN=1 run 2>&1); rc=$?
+[ $rc -eq 13 ] && [ "$(stop)" = "13 router" ] && ! hermes_ran && ok "qwen not served: exit 13 router" || bad "no qwen" "rc=$rc $(cat "$S" 2>&1)"
+
+fresh
+out=$(FAKE_SSH=127 run 2>&1); rc=$?
+[ $rc -eq 10 ] && [ "$(stop)" = "10 hermes_not_on_path" ] && [[ $(j "$S" 'd["missing"][0]["message"]') == "hermes not found on PATH"* ]] \
+  && ! grep -q 'topic-scout-sweep.md$' <(grep '^ssh .*hermes chat' "$FAKE_CALLS") \
+  && ok "hermes exits 127: exit 10 hermes_not_on_path, no sweep" || bad "hermes 127" "rc=$rc $(cat "$S" 2>&1)"
+
+fresh
+out=$(FAKE_BLOCK=research run 2>&1); rc=$?
+[ $rc -eq 11 ] && [ "$(stop)" = "11 decision" ] && [[ $(j "$S" 'd["reason"]') == "research: "*BLOCKED* ]] \
+  && [ "$(j "$S" 'len(d["outputs"])')" = 1 ] && ok "scanner refusal in a passing run: exit 11, reason holds the line" \
+  || bad "refusal" "rc=$rc $(cat "$S" 2>&1)"
+
+fresh
+out=$(FAKE_BLOCK=sweep FAKE_FIXTURE="$T/miscount.md" run 2>&1); rc=$?
+[ $rc -eq 11 ] && [ "$(stop)" = "11 decision" ] && [[ $(j "$S" 'd["reason"]') == "sweep: "*"could not be resolved"* ]] \
+  && [ "$(j "$S" '[c["result"] for c in d["checks"] if c["id"] == "fields"][0]')" = fail ] \
+  && ok "refusal and a failed field check: still 11" || bad "refusal over 12" "rc=$rc $(cat "$S" 2>&1)"
+
+fresh
+out=$(FAKE_RESEARCH_RC=1 FAKE_ROUTER_DIES=1 run 2>&1); rc=$?
+[ $rc -eq 13 ] && [ "$(stop)" = "13 router" ] && ok "session fails with the router down: exit 13 router" || bad "router died" "rc=$rc $(cat "$S" 2>&1)"
+
+fresh
+out=$(FAKE_SWEEP_MISSING=1 run 2>&1); rc=$?
+[ $rc -eq 12 ] && [ "$(stop)" = "12 failed" ] && [ "$(j "$S" 'd["outputs"]')" = "[]" ] \
+  && [[ $(j "$S" 'd["checks"][0]["id"], d["checks"][0]["result"], d["checks"][0]["detail"]') == "sweep fail FILE missing: "* ]] \
+  && ok "sweep finds no file (a run across midnight): exit 12" || bad "FILE missing" "rc=$rc $(cat "$S" 2>&1)"
+
+fresh
+out=$(FAKE_FIXTURE="$T/miscount.md" run 2>&1); rc=$?
+[ $rc -eq 12 ] && [ "$(stop)" = "12 failed" ] \
+  && [ "$(j "$S" '[c["result"] + " " + c["detail"] for c in d["checks"] if c["id"] == "fields"][0]')" = "fail 1 check(s) failed" ] \
+  && ok "field check fails: exit 12" || bad "fields fail" "rc=$rc $(cat "$S" 2>&1)"
+
+fresh
+out=$(FAKE_URL_CODES="https://example.org/window-perch-setup=404" run 2>&1); rc=$?
+[ $rc -eq 12 ] && [ "$(stop)" = "12 failed" ] \
+  && [ "$(j "$S" '[c["result"] + " " + c["detail"] for c in d["checks"] if c["id"] == "urls"][0]')" = "fail 5 OK, 0 UNVERIFIED, 1 DEAD" ] \
+  && ok "a DEAD URL: exit 12" || bad "dead URL" "rc=$rc $(cat "$S" 2>&1)"
+
+fresh
+out=$(FAKE_URL_CODES="https://example.org/window-perch-setup=403" run 2>&1); rc=$?
+[ $rc -eq 0 ] && [ "$(j "$S" '[c["result"] + " " + c["detail"] for c in d["checks"] if c["id"] == "urls"][0]')" = "warn 5 OK, 1 UNVERIFIED, 0 DEAD" ] \
+  && ok "an UNVERIFIED URL: warn, exit 0" || bad "unverified URL" "rc=$rc $(cat "$S" 2>&1)"
+
+fresh
+out=$(FAKE_NEW_SKILL=1 run 2>&1); rc=$?
+[ $rc -eq 0 ] && [ "$(j "$S" 'd["checks"][0]["id"], d["checks"][0]["result"]')" = "skills warn" ] \
+  && [[ $(j "$S" 'd["checks"][0]["detail"]') == "1 new, 0 removed."*"/scout-tricks/SKILL.md" ]] \
+  && ok "a new skill: warn naming it, exit 0" || bad "new skill" "rc=$rc $(cat "$S" 2>&1)"
 
 echo "passed=$pass failed=$fail"
 rm -rf "$T"

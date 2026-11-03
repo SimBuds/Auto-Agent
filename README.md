@@ -393,14 +393,20 @@ echo "exit=$?"
 ```
 
 It connects with `BatchMode=yes`, so it needs an SSH key for
-`hermes@localhost`. Without one, ssh fails instead of asking for a password.
+`hermes@localhost` (`ssh-copy-id -p 22220 hermes@localhost`, once). Without
+one, ssh fails instead of asking for a password. A command run over SSH gets
+the VM's system `PATH`, which lacks `~/.local/bin`, where the installer put
+`hermes` (checked 2026-11-03), so the runner puts that directory first.
 
 In order, it:
 
 - takes `out/.hermes-run.lock`, one lock for every Hermes job, because they
   share the VM and the GPU
 - deletes the last `out/scout/status.json`
-- logs its plan, then runs steps 1 to 4, reading the date from the VM
+- logs its plan
+- checks its job files, SSH to the VM, and the router from inside the VM
+  (setup step 5's two `curl` checks, with `qwen` listed)
+- runs steps 1 to 4, reading the date from the VM
 - pulls today's file to `out/scout/topic-scout-DATE-HHMMSSZ.md` (the time is
   UTC), so a second run on the same day keeps the first file
 - writes `out/scout/status.json` and exits
@@ -411,10 +417,22 @@ replies included, is appended to `out/scout/run.log`. Follow a run with
 
 | Exit | Meaning | `status.json` |
 | --- | --- | --- |
-| 0 | The file is pulled and the field check passed. The URL counts are in `checks` | Written |
-| 12 | A step or the field check failed. Read `run.log` | Written |
+| 0 | The file is pulled, the field check passed and no URL is DEAD. Review it, starting with any `warn` in `checks` | Written |
+| 10 | A job file is missing, there is no SSH key, or `hermes` was not found over SSH (`stop_reason` `hermes_not_on_path`). Each is named in `missing` | Written |
+| 11 | Hermes's scanner refused a command (`BLOCKED` or `could not be resolved`). `reason` holds the line. Decide what the job may run | Written |
+| 12 | A step failed, the sweep found no file, the field check failed, or a URL is DEAD. Read `run.log` | Written |
+| 13 | The VM did not answer SSH (`vm`), or the router is down or not serving `qwen` (`router`). Run again later | Written |
 | 14 | Another Hermes job holds the lock. Nothing was run or written | None |
 | 2 | Called with an argument | None |
+
+A refusal outranks a later failure or a pass, because only a person can
+clear it, and a failure after one is most likely its result. When a session
+fails, the runner checks the router again, and a router that went down makes
+the run 13, not 12. The sweep finds no file when research wrote nowhere, or
+when the VM's date changed between the two sessions, so do not start a run
+between 23:00 and 01:00 VM time. A `warn` never changes the exit code: an
+`UNVERIFIED` URL (open it in a browser), or a new skill (read its `SKILL.md`
+before trusting it).
 
 The status file is written beside its final name and renamed into place, so a
 reader sees the whole file or none. No file after a run means the run was
@@ -428,8 +446,9 @@ killed or crashed. Its keys follow SEO-LLM's `status.json`:
   "finished_at": "2026-11-02T22:30:00Z",
   "outputs": ["/path/to/Auto-Agent/out/scout/topic-scout-2026-11-02-223000Z.md"],
   "checks": [
+    {"id": "skills", "result": "pass", "detail": "no new or removed skills"},
     {"id": "fields", "result": "pass", "detail": "PASS: 10 ideas, all fields in shape"},
-    {"id": "urls", "result": "pass", "detail": "38 OK, 4 UNVERIFIED, 0 DEAD"}
+    {"id": "urls", "result": "warn", "detail": "38 OK, 4 UNVERIFIED, 0 DEAD"}
   ],
   "missing": [],
   "reason": null,
@@ -440,16 +459,17 @@ killed or crashed. Its keys follow SEO-LLM's `status.json`:
 | Key | What it holds |
 | --- | --- |
 | `job`, `exit_code` | The job, and the same exit code the process returned |
-| `stop_reason` | `failed` (12), or `null` when it finished |
+| `stop_reason` | `input` or `hermes_not_on_path` (10), `decision` (11), `failed` (12), `vm` or `router` (13), or `null` when it finished |
 | `finished_at` | When the file was written, in UTC |
 | `outputs` | The pulled file's absolute path, or an empty list when none was pulled |
-| `checks` | `fields` and `urls`, each with `result` `pass` or `fail` and a one-line `detail` |
-| `missing`, `reason` | Always `[]` and `null` for now |
+| `checks` | `sweep` (only when it found no file), `skills`, `fields` and `urls`, each with `result` `pass`, `warn` or `fail` and a one-line `detail` |
+| `missing` | On 10 only: each thing to supply, with its absolute `path` (`null` when it is not a file) and a `message` |
+| `reason` | On 11 only: the session and the line the scanner refused |
 | `log` | The absolute path to `run.log` |
 
 Every key is always present. The tests run on the host with fakes for the VM,
 never against it: `bash jobs/test-run-topic-scout.sh` must end
-`passed=15 failed=0` and exit 0.
+`passed=29 failed=0` and exit 0.
 
 ## Job: news digest
 

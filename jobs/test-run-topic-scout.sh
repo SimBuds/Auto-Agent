@@ -12,6 +12,7 @@ R="$T/repo"            # the temp repo the runner runs in
 export FAKE_VM="$T/vm" FAKE_CALLS="$T/calls" FAKE_REPO="$R"
 export FAKE_FIXTURE="$JOBS/fixtures/scout/topic-scout.md"
 export FAKE_ROUTER_DOWN="$T/router-down"   # the router is down while this file exists
+export FAKE_SSH_PID="$T/session-ssh.pid"   # the PID of the local ssh running a Hermes session
 pass=0; fail=0
 ok()  { echo "PASS $1"; pass=$((pass+1)); }
 bad() { echo "FAIL $1: $2"; fail=$((fail+1)); }
@@ -23,12 +24,15 @@ cat > "$T/bin/ssh" <<'EOF'
 while [ $# -gt 0 ]; do case $1 in -p|-o) shift 2 ;; -*) shift ;; *) break ;; esac; done
 shift
 echo "ssh $*" >> "$FAKE_CALLS"
+[[ $* == *"hermes chat"* ]] && echo $$ > "$FAKE_SSH_PID"
 case $FAKE_SSH in
   denied) echo "hermes@localhost: Permission denied (publickey,password)." >&2; exit 255 ;;
   down)   echo "ssh: connect to host localhost port 22220: Connection refused" >&2; exit 255 ;;
   127)    [[ $* == *"hermes chat"* ]] && { echo "bash: line 1: hermes: command not found" >&2; exit 127; } ;;
+  nostop) [[ $* == *"kill -TERM"* ]] && { echo "ssh: connect to host localhost port 22220: Connection refused" >&2; exit 255; } ;;
 esac
-HOME=$FAKE_VM bash -c "$*"
+# The VM side does not get the runner's lock fd: a real VM process never holds it.
+HOME=$FAKE_VM bash -c "$*" 9>&-
 EOF
 cat > "$T/bin/scp" <<'EOF'
 #!/bin/bash
@@ -83,7 +87,7 @@ chmod +x "$T/bin/"*
 mv "$T/bin/hermes" "$T/hermes"
 
 fresh() {  # a clean temp repo, fake VM and call log
-  rm -rf "$R" "$FAKE_VM" "$FAKE_CALLS" "$FAKE_ROUTER_DOWN"
+  rm -rf "$R" "$FAKE_VM" "$FAKE_CALLS" "$FAKE_ROUTER_DOWN" "$FAKE_SSH_PID"
   mkdir -p "$R" "$FAKE_VM/.hermes/skills/demo" "$FAKE_VM/.local/bin"
   touch "$FAKE_VM/.hermes/skills/demo/SKILL.md" "$FAKE_CALLS"
   cp "$T/hermes" "$FAKE_VM/.local/bin/hermes"
@@ -236,37 +240,65 @@ out=$(FAKE_NEW_SKILL=1 run 2>&1); rc=$?
   && [[ $(j "$S" 'd["checks"][0]["detail"]') == "1 new, 0 removed."*"/scout-tricks/SKILL.md" ]] \
   && ok "a new skill: warn naming it, exit 0" || bad "new skill" "rc=$rc $(cat "$S" 2>&1)"
 
-# --- SIGTERM: the hub starts each run with setsid and stops it by process group ---
-# term_at WHERE PATTERN: starts a run whose fake hangs at WHERE, waits for
-# PATTERN in the call log, then sends TERM to the run's group as the hub will.
-term_at() {
+# --- SIGTERM and SIGINT: the hub starts each run with setsid and stops it by
+# process group with TERM, and Ctrl+C sends INT to a hand-run's group ---
+# stop_at SIGNAL WHERE PATTERN: starts a run whose fake hangs at WHERE, waits
+# for PATTERN in the call log, then sends SIGNAL to the run's group. The run
+# starts with INT at its default, as a job in a terminal does.
+stop_at() {
   local i
   fresh
-  FAKE_HANG=$1 PATH="$T/bin:$PATH" setsid bash "$R/jobs/run-topic-scout.sh" >"$T/term.out" 2>&1 &
+  FAKE_HANG=$2 PATH="$T/bin:$PATH" setsid env --default-signal=INT bash "$R/jobs/run-topic-scout.sh" >"$T/term.out" 2>&1 &
   RUN=$!
-  for i in $(seq 100); do grep -q "$2" "$FAKE_CALLS" && break; /usr/bin/sleep 0.1; done
+  for i in $(seq 100); do grep -q "$3" "$FAKE_CALLS" && break; /usr/bin/sleep 0.1; done
   HPG=$(cat "$FAKE_VM/scout/.hermes.pgid" 2>/dev/null)
   /usr/bin/sleep 0.3
-  kill -TERM -- "-$RUN"
+  kill "-$1" -- "-$RUN"
+  for i in $(seq 100); do ps -p "$RUN" >/dev/null || break; /usr/bin/sleep 0.1; done
+  ps -p "$RUN" >/dev/null && { echo "run $RUN still alive 10 s after $1, killing it"; kill -KILL "$RUN"; }
   wait "$RUN"
   RC=$?
   for i in $(seq 30); do [ -z "$HPG" ] || ! pgrep -g "$HPG" >/dev/null && break; /usr/bin/sleep 0.1; done
 }
 lock_free() { flock -n "$R/out/.hermes-run.lock" true; }
 hermes_gone() { ! pgrep -g "$HPG" >/dev/null; }
+ssh_gone() { [ -s "$FAKE_SSH_PID" ] && ! ps -p "$(cat "$FAKE_SSH_PID")" >/dev/null; }
+leftovers() {  # whatever a failed run left behind, so the next test starts clean
+  pgrep -g "$RUN" >/dev/null && kill -KILL -- "-$RUN"
+  [ -n "$HPG" ] && pgrep -g "$HPG" >/dev/null && kill -KILL -- "-$HPG"
+  /usr/bin/sleep 0.2
+}
+session_pattern() { echo "^hermes topic-scout$([ "$1" = sweep ] && echo -sweep).md"; }
 
 for where in research sweep; do
-  term_at "$where" "^hermes topic-scout"$([ "$where" = sweep ] && echo -sweep)".md"
+  stop_at TERM "$where" "$(session_pattern "$where")"
   [ -n "$HPG" ] && [ $RC -eq 143 ] && [ "$(stop)" = "143 terminated" ] && hermes_gone && lock_free \
     && grep -q '^stopped Hermes process group' "$R/out/scout/run.log" \
     && ok "SIGTERM in $where: Hermes stopped in the VM, lock free, status 143 terminated" \
     || bad "SIGTERM in $where" "HPG=$HPG rc=$RC alive=$(pgrep -g "${HPG:-0}" | wc -l) $(cat "$S" 2>&1 | head -3)"
-  [ -n "$HPG" ] && pgrep -g "$HPG" >/dev/null && kill -KILL -- "-$HPG"
+  leftovers
 done
 
-term_at copy "^scp .*add-idea.sh"
+stop_at TERM copy "^scp .*add-idea.sh"
 [ $RC -eq 143 ] && [ "$(stop)" = "143 terminated" ] && lock_free && ! grep -q 'kill -TERM' "$FAKE_CALLS" \
   && ok "SIGTERM during the copy: status 143, no remote stop tried" || bad "SIGTERM in copy" "rc=$RC $(cat "$FAKE_CALLS")"
+leftovers
+
+for where in research sweep; do
+  stop_at INT "$where" "$(session_pattern "$where")"
+  [ -n "$HPG" ] && [ $RC -eq 130 ] && [ "$(stop)" = "130 interrupted" ] && hermes_gone && ssh_gone && lock_free \
+    && grep -q '^stopped Hermes process group' "$R/out/scout/run.log" \
+    && ok "SIGINT in $where: Hermes stopped in the VM, local ssh gone, lock free, status 130 interrupted" \
+    || bad "SIGINT in $where" "HPG=$HPG rc=$RC hermes_alive=$(pgrep -g "${HPG:-0}" | wc -l) ssh_alive=$(ps -p "$(cat "$FAKE_SSH_PID")" -o pid= | wc -l) $(cat "$S" 2>&1 | head -3)"
+  leftovers
+done
+
+FAKE_SSH=nostop stop_at INT research "$(session_pattern research)"
+[ $RC -eq 130 ] && [ "$(stop)" = "130 interrupted" ] && ssh_gone && lock_free \
+  && grep -q 'could not stop Hermes' "$R/out/scout/run.log" \
+  && ok "SIGINT when the remote stop fails: local ssh gone, lock free, status 130, log says so" \
+  || bad "SIGINT, stop fails" "rc=$RC ssh_alive=$(ps -p "$(cat "$FAKE_SSH_PID")" -o pid= | wc -l) $(cat "$S" 2>&1 | head -3)"
+leftovers
 
 echo "passed=$pass failed=$fail"
 rm -rf "$T"

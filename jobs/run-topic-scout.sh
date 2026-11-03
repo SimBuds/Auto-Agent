@@ -51,6 +51,7 @@ CHECKS=()    # one "id<TAB>result<TAB>detail" entry per check
 MISSING=()   # on 10, one "path<TAB>message" entry per input, path empty when there is none
 REASON=""    # the first line Hermes's scanner refused, which makes the run an 11
 IN_SESSION=""  # set while a Hermes session runs in the VM
+SESSION_PID=""  # the local ssh running that session
 
 log() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" | tee -a "$LOG"; }
 
@@ -131,7 +132,8 @@ session() {
   # In the background, so a SIGTERM runs on_term at once, not after the session.
   IN_SESSION=1
   "${SSH[@]}" "$(printf "$SESSION_CMD" "$2" "$3")" >>"$LOG" 2>&1 &
-  wait $!
+  SESSION_PID=$!
+  wait $SESSION_PID
   rc=$?
   IN_SESSION=""
   log "$name exit=$rc"
@@ -151,19 +153,26 @@ session() {
   finish 12 failed
 }
 
-# on_term: a caller stops a run with SIGTERM to its process group. Stop the
-# Hermes session in the VM too, then record the stop. The lock goes when the
-# run's last process exits.
-on_term() {
-  trap '' TERM
-  log "SIGTERM received"
+# on_signal CODE STOP_REASON: the hub stops a run with SIGTERM to its process
+# group, and Ctrl+C sends SIGINT to it. Stop the Hermes session in the VM, then
+# the local ssh waiting on it, which as a background job ignores SIGINT and
+# would otherwise hold the lock until the session ends. Then record the stop.
+on_signal() {
+  local rc
+  trap '' TERM INT
+  log "signal received: stopping (exit $1, $2)"
   if [ -n "$IN_SESSION" ]; then
     "${SSH[@]}" "$STOP_CMD" >>"$LOG" 2>&1
-    log "stop Hermes exit=$?"
+    rc=$?
+    log "stop Hermes exit=$rc"
+    [ $rc -eq 0 ] || log "ERROR: could not stop Hermes in the VM. Check it with: ssh -p 22220 $VM 'pgrep -u hermes -a'"
+    kill "$SESSION_PID" >>"$LOG" 2>&1
+    wait "$SESSION_PID"
   fi
-  finish 143 terminated
+  finish "$1" "$2"
 }
-trap on_term TERM
+trap 'on_signal 143 terminated' TERM
+trap 'on_signal 130 interrupted' INT
 
 log "run $JOB started, pid $$"
 log "plan: 0 check the local job files, SSH to the VM, and the router from the VM"

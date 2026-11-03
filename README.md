@@ -424,6 +424,7 @@ replies included, is appended to `out/scout/run.log`. Follow a run with
 | 13 | The VM did not answer SSH (`vm`), or the router is down or not serving `qwen` (`router`). Run again later | Written |
 | 14 | Another Hermes job holds the lock. Nothing was run or written | None |
 | 143 | Stopped by SIGTERM (see below) | Written |
+| 130 | Stopped by SIGINT (Ctrl+C on a hand-run). The hub never retries it | Written |
 | 2 | Called with an argument | None |
 
 A refusal outranks a later failure or a pass, because only a person can
@@ -460,7 +461,7 @@ killed or crashed. Its keys follow SEO-LLM's `status.json`:
 | Key | What it holds |
 | --- | --- |
 | `job`, `exit_code` | The job, and the same exit code the process returned |
-| `stop_reason` | `input` or `hermes_not_on_path` (10), `decision` (11), `failed` (12), `vm` or `router` (13), `terminated` (143), or `null` when it finished |
+| `stop_reason` | `input` or `hermes_not_on_path` (10), `decision` (11), `failed` (12), `vm` or `router` (13), `terminated` (143), `interrupted` (130), or `null` when it finished |
 | `finished_at` | When the file was written, in UTC |
 | `outputs` | The pulled file's absolute path, or an empty list when none was pulled |
 | `checks` | `sweep` (only when it found no file), `skills`, `fields` and `urls`, each with `result` `pass`, `warn` or `fail` and a one-line `detail` |
@@ -479,6 +480,13 @@ no terminal keeps running in the VM after its client goes away, still holding
 the GPU. Each session therefore runs in its own process group in the VM, with
 the group's id in `~/scout/.hermes.pgid` while it runs.
 
+Ctrl+C on a hand-run sends SIGINT to the same group, and the runner handles
+it the same way, with exit `130` and `stop_reason` `interrupted`. It also
+stops its own ssh to the session, because a background job in a script
+ignores SIGINT, and that ssh would otherwise keep the lock until the session
+ended. If the VM cannot be reached to stop Hermes, `run.log` says so and
+names the command to check it by hand.
+
 ```bash
 # Runs in: local terminal, host, in this repo.
 setsid bash jobs/run-topic-scout.sh & RUN=$!
@@ -487,7 +495,7 @@ wait "$RUN"; echo "exit=$?"   # 143
 ```
 
 The tests run on the host with fakes for the VM, never against it:
-`bash jobs/test-run-topic-scout.sh` must end `passed=32 failed=0` and exit 0.
+`bash jobs/test-run-topic-scout.sh` must end `passed=35 failed=0` and exit 0.
 
 ## Job: news digest
 

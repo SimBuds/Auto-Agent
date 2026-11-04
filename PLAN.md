@@ -514,7 +514,9 @@ router serves Hermes*.
 - `platform_toolsets.telegram: []` gave no tools (`tool_turns=0`), and qwen
   then printed the tool call it wanted as JSON text. Casey chose `[web]`:
   real searches, and still no terminal or file. `hermes config set` writes
-  it as a block list (`- web`).
+  it as a block list (`- web`). Later the same day Casey added `todo`,
+  `clarify`, `session_search` and `memory`, none of which runs a command.
+  The model's text-only input rules out `vision` and `stt`.
 - In a session whose history held those JSON replies, qwen repeated one
   search until Hermes's guardrail stopped it (`identical_call_streak_halt`).
   `/new` cleared it.

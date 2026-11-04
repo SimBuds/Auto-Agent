@@ -193,13 +193,13 @@ in the VM and answers your user ID only. The token never leaves the VM.
    Telegram Desktop turn on Settings, Advanced, Experimental, "Show Peer
    IDs in Profile".
 3. In the VM, run the setup, answer the service question with "Skip", then
-   limit Telegram chats to the web tools before anything starts:
+   limit Telegram chats to five tools that run no commands, before anything starts:
 
 ```bash
 # Runs in: inside the VM. Interactive: choose Telegram, paste the token, give your user ID as the only allowed user. Skip the service.
 hermes gateway setup
-hermes config set platform_toolsets.telegram "[web]"
-grep -n -A1 '^  telegram:' ~/.hermes/config.yaml                          # must show telegram: and - web
+hermes config set platform_toolsets.telegram "[web, todo, clarify, session_search, memory]"
+grep -n -A5 '^  telegram:' ~/.hermes/config.yaml                          # must list exactly those five
 grep -c '^TELEGRAM_BOT_TOKEN=' ~/.hermes/.env                              # must print 1 (a count, never the token)
 grep '^TELEGRAM_ALLOWED_USERS=' ~/.hermes/.env | cut -d= -f2 | tr ',' '\n' | grep -c .   # must print 1
 grep -c -E '^(TELEGRAM_GROUP_ALLOWED|GATEWAY_ALLOW_ALL)' ~/.hermes/.env       # must print 0
@@ -269,7 +269,7 @@ setup.
 | `model.context_length`                | `131072`                  | The router's context, stated rather than guessed                                                                             |
 | `skills.write_approval`               | `true`                    | Skills Hermes writes wait in `~/.hermes/pending/skills/` until you approve them (`/skills pending`, `/skills approve`) |
 | `auxiliary.background_review.enabled` | `false`                   | Stops the post-run review drafting skills and memory notes on its own                                                        |
-| `platform_toolsets.telegram` | `[web]` | Telegram chats can search and read the web, and cannot run commands or write files |
+| `platform_toolsets.telegram` | `[web, todo, clarify, session_search, memory]` | Telegram chats can search the web, plan, ask you questions, search past chats and keep notes. They cannot run commands or write files |
 
 Leave the managed local runtime (`local_runtime`) off, since a second
 llama.cpp would fight the router for VRAM. Keep the terminal backend

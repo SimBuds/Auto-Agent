@@ -54,6 +54,13 @@ case $q in
     if [ -e "$l" ]; then left=$(wc -c < "$l"); else left=none; fi
     echo "research found FILE: $saw LEFT bytes: $left" >> "$FAKE_CALLS"
     cp "$FAKE_FIXTURE" "$f"
+    # The fixture has 2 ideas, so research says why in LEFT, unless FAKE_LEFT
+    # is empty (nothing said, as batch 2 run 5) or missing (no LEFT file).
+    case $FAKE_LEFT in
+      empty)   : > "$l" ;;
+      missing) rm -f "$l" ;;
+      *)       echo 'Left out: fixture idea (2 competitors found)' >> "$l" ;;
+    esac
     [ "$FAKE_BLOCK" = research ] && echo "  ┊ 💻 \$ cat <<'X' | bash  BLOCKED: single-query mode (-q) runs without a user present to approve it"
     [ "$FAKE_NEW_SKILL" = 1 ] && mkdir -p "$HOME/.hermes/skills/scout-tricks" && touch "$HOME/.hermes/skills/scout-tricks/SKILL.md"
     [ "$FAKE_ROUTER_DIES" = 1 ] && touch "$FAKE_ROUTER_DOWN"

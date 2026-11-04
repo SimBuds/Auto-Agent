@@ -210,15 +210,15 @@ setup.
 
 ### Hermes config
 
-| Key | Value | Why |
-| --- | --- | --- |
-| `model.provider` | `custom` | Any OpenAI-compatible server |
-| `model.base_url` | `http://10.0.2.2:8080/v1` | The host's router, through QEMU's address for the host |
-| `model.default` | `qwen` | One pinned model |
-| `model.api_key` | `local` | A placeholder: the router has no auth |
-| `model.context_length` | `131072` | The router's context, stated rather than guessed |
-| `skills.write_approval` | `true` | Skills Hermes writes wait in `~/.hermes/pending/skills/` until you approve them (`/skills pending`, `/skills approve`) |
-| `auxiliary.background_review.enabled` | `false` | Stops the post-run review drafting skills and memory notes on its own |
+| Key                                     | Value                       | Why                                                                                                                          |
+| --------------------------------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `model.provider`                      | `custom`                  | Any OpenAI-compatible server                                                                                                 |
+| `model.base_url`                      | `http://10.0.2.2:8080/v1` | The host's router, through QEMU's address for the host                                                                       |
+| `model.default`                       | `qwen`                    | One pinned model                                                                                                             |
+| `model.api_key`                       | `local`                   | A placeholder: the router has no auth                                                                                        |
+| `model.context_length`                | `131072`                  | The router's context, stated rather than guessed                                                                             |
+| `skills.write_approval`               | `true`                    | Skills Hermes writes wait in `~/.hermes/pending/skills/` until you approve them (`/skills pending`, `/skills approve`) |
+| `auxiliary.background_review.enabled` | `false`                   | Stops the post-run review drafting skills and memory notes on its own                                                        |
 
 Leave the managed local runtime (`local_runtime`) off, since a second
 llama.cpp would fight the router for VRAM. Keep the terminal backend
@@ -229,6 +229,7 @@ reuses without asking, so read its `SKILL.md` before trusting it.
 
 **Topic scout** (article ideas for a content site, in the input shape of an
 SEO pipeline):
+
 - `jobs/topic-scout.md` is the research prompt: the site, its audience and
   the seasons it covers. `jobs/topic-scout-sweep.md` checks and finishes the
   file.
@@ -241,6 +242,7 @@ SEO pipeline):
 
 **News digest** (Hacker News, Hugging Face trending models and new arXiv
 papers, rated against your interests):
+
 - The profile is a markdown file of your interests, read from
   `~/Apps/Portfolio/CASEY-INTERESTS.md` or from `NEWS_PROFILE`. It never goes
   into this repo. Its `## Tuning notes` section, if any, stays on the host.
@@ -277,9 +279,9 @@ result back and checks it. It never starts or stops the VM or changes
 Hermes's config. One lock (`out/.hermes-run.lock`) lets only one job run at
 a time.
 
-| Job | Writes to `out/` |
-| --- | --- |
-| Topic scout | `scout/topic-scout-DATE-HHMMSSZ.md`, `scout/status.json`, `scout/run.log` |
+| Job         | Writes to `out/`                                                                                                  |
+| ----------- | ------------------------------------------------------------------------------------------------------------------- |
+| Topic scout | `scout/topic-scout-DATE-HHMMSSZ.md`, `scout/status.json`, `scout/run.log`                                     |
 | News digest | `news/digest-DAY.md`, `news/ratings-DAY.txt`, `news/candidates-DAY.*`, `news/status.json`, `news/run.log` |
 
 Follow a run with `tail -f out/scout/run.log` (or `out/news/`). Do not start
@@ -308,17 +310,17 @@ adjust the profile's wording.
 
 Both runners share these. A scheduler retries only 13 and 14.
 
-| Exit | Meaning | `status.json` |
-| --- | --- | --- |
-| 0 | Done and checked. Review any `warn` in `checks` | Written |
-| 10 | Missing input or a setup fault: a job file, `NEWS_CONTACT`, the profile, the SSH key, `hermes` on the VM's `PATH`, or Hermes's context not matching the router's (`missing` names each) | Written |
-| 11 | Hermes's scanner refused a command. `reason` holds the line | Written |
-| 12 | A step or check failed. Read `run.log` | Written |
-| 13 | A service is down: the VM (`vm`, including a session whose connection dropped), the router (`router`), or every news source (`network`). Retry later | Written |
-| 14 | Another job holds the lock. Nothing ran | None |
-| 143 | Stopped by SIGTERM | Written |
-| 130 | Stopped by Ctrl+C. Not retried | Written |
-| 2 | Called with an argument | None |
+| Exit | Meaning                                                                                                                                                                                         | `status.json` |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- |
+| 0    | Done and checked. Review any `warn` in `checks`                                                                                                                                             | Written         |
+| 10   | Missing input or a setup fault: a job file, `NEWS_CONTACT`, the profile, the SSH key, `hermes` on the VM's `PATH`, or Hermes's context not matching the router's (`missing` names each) | Written         |
+| 11   | Hermes's scanner refused a command. `reason` holds the line                                                                                                                                   | Written         |
+| 12   | A step or check failed. Read `run.log`                                                                                                                                                        | Written         |
+| 13   | A service is down: the VM (`vm`, including a session whose connection dropped), the router (`router`), or every news source (`network`). Retry later                                      | Written         |
+| 14   | Another job holds the lock. Nothing ran                                                                                                                                                         | None            |
+| 143  | Stopped by SIGTERM                                                                                                                                                                              | Written         |
+| 130  | Stopped by Ctrl+C. Not retried                                                                                                                                                                  | Written         |
+| 2    | Called with an argument                                                                                                                                                                         | None            |
 
 `status.json` is written atomically, and every key is always present:
 
@@ -338,8 +340,10 @@ Both runners share these. A scheduler retries only 13 and 14.
 
 `stop_reason` is `input` or `hermes_not_on_path` (10), `decision` (11),
 `failed` (12), `vm`, `router` or `network` (13), `terminated` (143),
-`interrupted` (130), or `null`. The scout's `checks` are `skills`, `fields`
-and `urls` (plus `sweep` when research wrote no file). The digest's are
+`interrupted` (130), or `null`. The scout's `checks` are `skills`, `fields`,
+`urls` and `count` (plus `sweep` when research wrote no file). `count` warns
+when a file has fewer than 10 ideas and nothing in the left-out list, which
+can mean the session stopped early. The digest's are
 `collect`, `digest` and `profile`.
 
 ### Stop a run
@@ -361,7 +365,7 @@ The tests run on the host with fakes for the VM, the router and the network:
 
 ```bash
 # Runs in: local terminal, host, in this repo. Each must end with failed=0 and exit 0.
-bash jobs/test-run-topic-scout.sh    # passed=54
+bash jobs/test-run-topic-scout.sh    # passed=58
 bash jobs/test-run-news-digest.sh    # passed=24
 bash jobs/test-add-idea.sh           # passed=37
 bash jobs/test-add-rating.sh         # passed=57
@@ -370,13 +374,13 @@ python3 jobs/test-news-collect.py    # passed=36
 
 ### Repo layout
 
-| Path | What it is |
-| --- | --- |
-| `jobs/run-topic-scout.sh`, `jobs/run-news-digest.sh` | The runners, one per job |
-| `jobs/runner-lib.sh` | Shared runner code: SSH, lock, status, signals |
-| `jobs/*.md` | Prompts Hermes receives |
-| `jobs/add-idea.sh`, `jobs/add-rating.sh`, `jobs/check-scout.sh` | The scripts that hold each job's rules |
-| `jobs/news-collect.py` | Fetches the news candidates on the host |
-| `jobs/test-*`, `jobs/fixtures/` | Tests and their fixtures |
-| `out/` | Results and logs, gitignored |
-| `PLAN.md`, `AGENTS.md` | The why, and the rules for coding agents |
+| Path                                                                  | What it is                                     |
+| --------------------------------------------------------------------- | ---------------------------------------------- |
+| `jobs/run-topic-scout.sh`, `jobs/run-news-digest.sh`              | The runners, one per job                       |
+| `jobs/runner-lib.sh`                                                | Shared runner code: SSH, lock, status, signals |
+| `jobs/*.md`                                                         | Prompts Hermes receives                        |
+| `jobs/add-idea.sh`, `jobs/add-rating.sh`, `jobs/check-scout.sh` | The scripts that hold each job's rules         |
+| `jobs/news-collect.py`                                              | Fetches the news candidates on the host        |
+| `jobs/test-*`, `jobs/fixtures/`                                   | Tests and their fixtures                       |
+| `out/`                                                              | Results and logs, gitignored                   |
+| `PLAN.md`, `AGENTS.md`                                            | The why, and the rules for coding agents       |

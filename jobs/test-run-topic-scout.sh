@@ -49,7 +49,7 @@ out=$(run 2>&1); rc=$?
 P=$(j "$S" '"\n".join(d["outputs"])')
 [[ $P == "$R/out/scout/topic-scout-$(date +%F)-"[0-9][0-9][0-9][0-9][0-9][0-9]Z.md ]] && cmp -s "$P" "$FAKE_FIXTURE" \
   && ok "status: outputs holds the pulled file" || bad "outputs" "P=$P"
-[ "$(j "$S" '"|".join(c["id"] + " " + c["result"] for c in d["checks"])')" = "skills pass|fields pass|urls pass" ] \
+[ "$(j "$S" '"|".join(c["id"] + " " + c["result"] for c in d["checks"])')" = "skills pass|fields pass|urls pass|count pass" ] \
   && [ "$(j "$S" 'd["checks"][2]["detail"]')" = "6 OK, 0 UNVERIFIED, 0 DEAD" ] \
   && ok "status: skills, fields and urls pass" || bad "checks" "$(j "$S" 'd["checks"]')"
 [ "$(j "$S" 'd["log"]')" = "$R/out/scout/run.log" ] && ok "status: log path" || bad "log path" "$(j "$S" 'd["log"]')"
@@ -275,6 +275,28 @@ fresh
 out=$(FAKE_URL_CODES="https://example.org/window-perch-setup=000" run 2>&1); rc=$?
 [ $rc -eq 12 ] && [ "$(j "$S" '[c["result"] + " " + c["detail"] for c in d["checks"] if c["id"] == "urls"][0]')" = "fail 5 OK, 0 UNVERIFIED, 1 DEAD" ] \
   && ok "no answer (000): DEAD, exit 12" || bad "000" "rc=$rc $(cat "$S" 2>&1)"
+
+# --- count: a short file with no left-out note may be a session that stopped
+# early (batch 2 run 5 replied "I'm ready" at 5 ideas). Warn, never fail ---
+count() { j "$S" '[c["result"] + " " + c["detail"] for c in d["checks"] if c["id"] == "count"][0]'; }
+fresh
+out=$(FAKE_LEFT=empty run 2>&1); rc=$?
+[ $rc -eq 0 ] && [[ $(count) == "warn 2 ideas and no left-out note: research may have stopped early. Read run.log" ]] \
+  && ok "2 ideas, LEFT empty: count warn, exit 0" || bad "count empty" "rc=$rc $(count 2>&1)"
+fresh
+out=$(FAKE_LEFT=missing run 2>&1); rc=$?
+[ $rc -eq 0 ] && [[ $(count) == "warn 2 ideas and no left-out note"* ]] \
+  && ok "2 ideas, no LEFT file: count warn, exit 0" || bad "count missing" "rc=$rc $(count 2>&1)"
+fresh
+out=$(run 2>&1); rc=$?
+[ $rc -eq 0 ] && [ "$(count)" = "pass 2 ideas, 1 left-out note" ] \
+  && ok "2 ideas with a left-out note: count pass" || bad "count noted" "rc=$rc $(count 2>&1)"
+fresh
+TEN="$T/ten-ideas.md"
+{ echo '# Topic scout'; for n in 1 2 3 4 5 6 7 8 9 10; do echo "## $n. Idea $n"; done; } > "$TEN"
+out=$(FAKE_FIXTURE="$TEN" FAKE_LEFT=empty run 2>&1); rc=$?
+[ "$(count)" = "pass 10 ideas, 0 left-out notes" ] \
+  && ok "10 ideas, LEFT empty: count pass" || bad "count ten" "rc=$rc $(count 2>&1)"
 
 fresh
 out=$(FAKE_NEW_SKILL=1 run 2>&1); rc=$?

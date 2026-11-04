@@ -30,7 +30,7 @@ log "plan: 4 research session (toolsets web,terminal)"
 log "plan: 5 sweep session (toolsets terminal)"
 log "plan: 6 diff the VM's skills against step 3"
 log "plan: 7 pull ~/scout/topic-scout-DATE.md to out/scout/topic-scout-DATE-HHMMSSZ.md"
-log "plan: 8 field check, then URL check (one request per competitor URL)"
+log "plan: 8 field check, URL check (one request per competitor URL), then the idea count against LEFT"
 
 for f in jobs/topic-scout.md jobs/topic-scout-sweep.md jobs/topic-scout-seen.txt jobs/add-idea.sh jobs/check-scout.sh; do
   [ -s "$f" ] || MISSING+=("$PWD/$f	missing or empty")
@@ -100,6 +100,19 @@ if [ $URC -ne 0 ] || [ "$DEAD" -gt 0 ]; then CHECKS+=("urls	fail	$DETAIL")
 elif [ "$UNVERIFIED" -gt 0 ]; then CHECKS+=("urls	warn	$DETAIL")
 else CHECKS+=("urls	pass	$DETAIL"); fi
 log "URL check exit=$URC"
+
+# Under 10 ideas with nothing in LEFT means the session neither filled the file
+# nor said why: on 2026-11-04 one replied "I'm ready" at 5 ideas and stopped.
+# A warn, because a real shortage is still a valid run (never pad).
+IDEAS=$(grep -c '^## [0-9]' "$FILE")
+LEFT_N=$("${SSH[@]}" "wc -l < ~/scout/left-out-$DATE.txt" 2>>"$LOG") || LEFT_N=""
+log "count: $IDEAS ideas, LEFT lines '${LEFT_N:-missing}'"
+if [ "$IDEAS" -lt 10 ] && ! [ "${LEFT_N:-0}" -gt 0 ]; then
+  CHECKS+=("count	warn	$IDEAS ideas and no left-out note: research may have stopped early. Read run.log")
+else
+  [ "${LEFT_N:-0}" = 1 ] && NOTE=note || NOTE=notes
+  CHECKS+=("count	pass	$IDEAS ideas, ${LEFT_N:-0} left-out $NOTE")
+fi
 
 [ $RC -eq 0 ] && [ $URC -eq 0 ] && [ "$DEAD" -eq 0 ] || finish 12 failed
 finish 0 ""

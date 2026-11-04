@@ -99,7 +99,7 @@ finish() {
   exit "$code"
 }
 
-# router_up: README setup step 5's two checks, run in the VM. Returns 0 when the
+# router_up: README setup step 4's two checks, run in the VM. Returns 0 when the
 # router answers ok and lists qwen, 1 when it does not, 2 when SSH itself failed.
 router_up() {
   local out rc

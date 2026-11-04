@@ -1,6 +1,6 @@
 # Topic scout: slugs already covered or already suggested. One slug per line.
-# The scout never suggests a slug listed here, and the README field check fails on one.
-# Add a reviewed run's slugs with the command in README, Job: topic scout, step 5.
+# The scout never suggests a slug listed here, and the field check (jobs/check-scout.sh) fails on one.
+# Add a reviewed run's slugs with the command in README, How to use, After a run.
 
 # Pages already in SEO-LLM
 cat-water-fountain

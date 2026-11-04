@@ -13,7 +13,7 @@
 # that compared carrier with carriers. A slug with 2 or more topic words
 # repeats a seen slug sharing 2 of them. A slug with 1 repeats any seen slug
 # sharing it (run 16's best-cat-trees-guide-canada was just "trees"). The
-# README field check uses the same word rules, so keep the two identical.
+# field check in jobs/check-scout.sh uses the same word rules, so keep the two identical.
 #
 # REJECTED (exit 3): rules the prompt alone did not hold in run 16. A "Best ..."
 # title compares products, so it is a roundup, and a run has at most 3. So is a

@@ -1,8 +1,8 @@
 #!/bin/bash
-# Runs the news digest with no one at the keyboard: README news digest steps 1
-# to 4, as one host command for a scheduler or a hand-run. It never starts or
-# stops the VM, takes snapshots, or changes Hermes's config. The exit codes and
-# status.json are described in README, news digest, "Run it unattended".
+# Runs the news digest with no one at the keyboard: collect, copy in, rate,
+# pull the digest, as one host command for a scheduler or a hand-run. It never
+# starts or stops the VM, takes snapshots, or changes Hermes's config. The exit
+# codes and status.json are described in README, How to use, "Exit codes".
 #   NEWS_CONTACT=you@example.com bash jobs/run-news-digest.sh
 # NEWS_CONTACT is the User-Agent's contact address, read at run time and never
 # stored. NEWS_PROFILE overrides the profile's path.

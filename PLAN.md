@@ -46,7 +46,7 @@ approves every stage by hand.
    ones worth doing and they become SEO-LLM's inputs (the page slug and
    `competitors.txt`). SEO-LLM keeps its staged pipeline and its approvals.
    Decided 2026-09-25: the prompt lives in `jobs/topic-scout.md` and runs by
-   hand first (README, *Job: topic scout*). Search uses Hermes's keyless
+   hand first (README, *How to use*). Search uses Hermes's keyless
    default, which rotates across free vendor tiers, so no key is stored and
    only public cat-product queries leave the VM. Each idea carries SEO-LLM's
    own fields (slug, type, suggested keywords, competitor URLs) plus why now,
@@ -250,7 +250,7 @@ and n8n, bound to 127.0.0.1) will schedule the jobs. It does not exist yet.
   They share one exit contract with Jobhunt and SEO-LLM: 0 ok, 2 usage, 10
   input or config, 11 needs a person, 12 a stage failed, 13 a service the run
   needs is down, 14 busy. Each writes `out/<job>/status.json`. The README's
-  *Run it unattended* sections have the details.
+  *How to use* section has the details.
 - **Until the hub exists, Casey runs them by hand,** the scout weekly and the
   news daily. After that, the hub's host runner calls them from the repo
   root, starts each under `setsid`, stops one by its process group, and
@@ -262,7 +262,7 @@ and n8n, bound to 127.0.0.1) will schedule the jobs. It does not exist yet.
 - **Hermes never calls the hub,** holds no hub token, and never sees Jobhunt
   or SEO-LLM data. Every output still ends in a file Casey reviews.
 - **The runners need an SSH key for `hermes@localhost`,** because they never
-  prompt. Installing it is Casey's (README setup, step 10). Installed
+  prompt. Installing it is Casey's (README, *Connecting guide*). Installed
   2026-11-03.
 
 ---
@@ -418,8 +418,8 @@ that codifies one.
 ## Setup
 
 The step-by-step setup (check the host, build the VM, install Hermes, point it
-at the router, snapshots, everyday use, removal) is in
-[`README.md`](README.md#setup-guide-hermes-in-a-quickemu-debian-vm). The
+at the router, snapshots, removal) is in
+[`README.md`](README.md#setup-guide). The
 findings behind its settings are here, so the README can stay short. The job
 findings are under Good fits #1 and #6, and the router's under *How the
 router serves Hermes*.

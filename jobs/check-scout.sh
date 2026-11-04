@@ -1,6 +1,6 @@
 #!/bin/bash
 # Checks a pulled topic scout file on the host. Both checks moved verbatim from
-# README topic scout step 4 (Phase 15, 2026-11-02) so a runner can call them.
+# the README's old topic scout step 4 (Phase 15, 2026-11-02) so a runner can call them.
 #   bash jobs/check-scout.sh fields FILE   a FAIL line per problem and exit 1, or PASS and exit 0
 #   bash jobs/check-scout.sh urls FILE     an OK, UNVERIFIED or DEAD line per competitor URL,
 #                                          one request every two seconds

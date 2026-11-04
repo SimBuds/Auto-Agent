@@ -1,9 +1,9 @@
 #!/bin/bash
-# Runs the topic scout with no one at the keyboard: README topic scout steps 1
-# to 4, then the field and URL checks, as one host command for a scheduler or a
-# hand-run. It never starts or stops the VM, takes snapshots, or changes
-# Hermes's config. The exit codes and status.json are described in README,
-# topic scout, "Run it unattended".
+# Runs the topic scout with no one at the keyboard: copy the job in, research,
+# sweep, pull, then the field and URL checks, as one host command for a
+# scheduler or a hand-run. It never starts or stops the VM, takes snapshots, or
+# changes Hermes's config. The exit codes and status.json are described in
+# README, How to use, "Exit codes".
 #   bash jobs/run-topic-scout.sh
 
 if [ $# -ne 0 ]; then

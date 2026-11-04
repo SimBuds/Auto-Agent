@@ -108,8 +108,8 @@ approves every stage by hand.
      session. The field check allows fewer than 10 (never pad), so the run
      passed. Over SSH without a terminal, `--oneshot` still logs reasoning,
      tool lines and replies, so refusals would show in `run.log`. A guest
-     reboot mid-session hung a run until QEMU exited (Phase 25 plans an SSH
-     keepalive).
+     reboot mid-session hung a run until QEMU exited (fixed in Phase 25: an
+     SSH keepalive, and a dropped session exits 13 `vm`).
 2. **Public health report for everything4cats.ca.** A daily HTTP check from the
    VM: key pages up, broken internal links, the affiliate disclosure present,
    the Article schema intact. It never goes near the Lightsail server or the
@@ -439,13 +439,18 @@ router serves Hermes*.
   passed on it (2026-10-20). The update also tries to install cua-driver,
   the computer-use tool, which fails on a missing `libXi.so.6` and cannot
   run in a VM with no desktop anyway.
+- 2026-11-04: `hermes update` moved it to `v0.22.7+144.gcad0aaa` (stable
+  channel), with an `apt-get upgrade` of 22 guest packages (no new
+  kernel). Every key set here survived, and `--oneshot`, `--toolsets` and
+  `--query-file` are still in `hermes chat --help`.
 
 **Hermes config keys**
 - `auxiliary.background_review.enabled false`: on 2026-09-26 the post-run
   review drafted a new `topic-scout` skill after four runs in a row, each a
   partial copy of `jobs/topic-scout.md`. `/refine` still runs a review by
   hand. Hermes's example config names `skills.creation_nudge_interval` for
-  this, but v0.21.5 does not recognize that key.
+  this, but v0.21.5 did not recognize that key. v0.22.7 does, and its
+  config has it at 0 (disabled, 2026-11-04).
 - `skills.write_approval true`: on 2026-09-25 Hermes wrote a skill unasked,
   and it was truncated mid-command. Skills now wait in
   `~/.hermes/pending/skills/` until approved.

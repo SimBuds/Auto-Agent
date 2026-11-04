@@ -170,6 +170,56 @@ ssh-copy-id -p 22220 hermes@localhost
 ssh -p 22220 -o BatchMode=yes hermes@localhost true; echo "key check exit=$?"   # must print 0
 ```
 
+quickemu forwards the port on all of the host's interfaces, so turn off
+password login once the key works:
+
+```bash
+# Runs in: inside the VM. Keys only for SSH, then a config check and a reload. Safe to run twice.
+echo 'PasswordAuthentication no' | sudo tee /etc/ssh/sshd_config.d/10-no-password.conf
+sudo sshd -t && echo "sshd config OK"
+sudo systemctl reload ssh
+```
+
+### Telegram
+
+You talk to Hermes by DM with a Telegram bot. The gateway runs as a service
+in the VM and answers your user ID only. The token never leaves the VM.
+
+1. In Telegram, message **@BotFather**: `/newbot` (a username ending in
+   `bot`), then `/setjoingroups` and choose **Disable**, so the bot cannot
+   be added to a group. Leave group privacy on. Keep the token for the
+   setup prompt only, never in a command line, chat or note.
+2. Find your numeric user ID: message @userinfobot (Android), or in
+   Telegram Desktop turn on Settings, Advanced, Experimental, "Show Peer
+   IDs in Profile".
+3. In the VM, run the setup, answer the service question with "Skip", then
+   limit Telegram chats to the web tools before anything starts:
+
+```bash
+# Runs in: inside the VM. Interactive: choose Telegram, paste the token, give your user ID as the only allowed user. Skip the service.
+hermes gateway setup
+hermes config set platform_toolsets.telegram "[web]"
+grep -n -A1 '^  telegram:' ~/.hermes/config.yaml                          # must show telegram: and - web
+grep -c '^TELEGRAM_BOT_TOKEN=' ~/.hermes/.env                              # must print 1 (a count, never the token)
+grep '^TELEGRAM_ALLOWED_USERS=' ~/.hermes/.env | cut -d= -f2 | tr ',' '\n' | grep -c .   # must print 1
+grep -c -E '^(TELEGRAM_GROUP_ALLOWED|GATEWAY_ALLOW_ALL)' ~/.hermes/.env       # must print 0
+```
+
+4. Install the service, and let it start at boot with no login:
+
+```bash
+# Runs in: inside the VM. Choose "User service". Safe to run twice.
+hermes gateway install
+sudo loginctl enable-linger hermes
+loginctl show-user hermes -p Linger                  # must show Linger=yes
+systemctl --user is-active hermes-gateway.service    # must print active
+```
+
+Send `/new` when a chat starts repeating itself: a session's earlier
+replies steer the next ones. Messages sent while the VM is off or
+rebooting are dropped, not queued. `/skills pending` lists skills waiting
+for approval.
+
 ## How to tailor
 
 ### VM settings
@@ -219,6 +269,7 @@ setup.
 | `model.context_length`                | `131072`                  | The router's context, stated rather than guessed                                                                             |
 | `skills.write_approval`               | `true`                    | Skills Hermes writes wait in `~/.hermes/pending/skills/` until you approve them (`/skills pending`, `/skills approve`) |
 | `auxiliary.background_review.enabled` | `false`                   | Stops the post-run review drafting skills and memory notes on its own                                                        |
+| `platform_toolsets.telegram` | `[web]` | Telegram chats can search and read the web, and cannot run commands or write files |
 
 Leave the managed local runtime (`local_runtime`) off, since a second
 llama.cpp would fight the router for VRAM. Keep the terminal backend

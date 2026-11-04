@@ -4,9 +4,11 @@ A plan for running [Hermes Agent](https://github.com/NousResearch/hermes-agent)
 (Nous Research) on this workstation, against the Local-LLM router, inside a
 QEMU virtual machine. Written 2026-09-25. **Status: installed and verified
 2026-09-25, updated and re-verified 2026-10-09 to 2026-10-20** (Hermes Agent
-`v0.21.6+337.g26610b0`, on `qwen`). No jobs are scheduled yet: each job is
-one host command that Casey runs by hand until the hub exists, and the hub
-calls after that (see *Scheduling*).
+`v0.21.6+337.g26610b0`, on `qwen`, v0.22.7 since 2026-11-04). The jobs run
+by hand through their host runners. Since 2026-11-04 Casey talks to Hermes
+through Telegram (chosen over Discord the same day, as the simpler setup
+with the same privacy), as a research and data-organizing assistant, mostly
+overnight. The hub is on hold (see *Scheduling*).
 
 Hermes is an agent that runs on a schedule or on demand, keeps memory between
 sessions, writes reusable "skills" from work that succeeded, and can report
@@ -245,6 +247,13 @@ seen behaving on `qwen`. #6 came after #1 closed, and #7 comes with the hub.
 Decided 2026-11-02. A hub service in its own repository (an API, Postgres
 and n8n, bound to 127.0.0.1) will schedule the jobs. It does not exist yet.
 
+**On hold since 2026-11-04 (Casey).** Casey talks to Hermes through Telegram
+and uses it as a research and data-organizing assistant, mostly overnight,
+and keeps running Jobhunt and SEO-LLM by hand. So the hub and n8n are on
+hold, and the notes below stay for when they return. The runners
+(`jobs/run-topic-scout.sh`, `jobs/run-news-digest.sh`) stay as they are, for
+hand runs.
+
 - **Each job is one non-interactive host command with a stable contract:**
   `jobs/run-topic-scout.sh` (weekly) and `jobs/run-news-digest.sh` (daily).
   They share one exit contract with Jobhunt and SEO-LLM: 0 ok, 2 usage, 10
@@ -255,10 +264,13 @@ and n8n, bound to 127.0.0.1) will schedule the jobs. It does not exist yet.
   news daily. After that, the hub's host runner calls them from the repo
   root, starts each under `setsid`, stops one by its process group, and
   retries only on 13 and 14.
-- **No Hermes gateway and no cron in the VM.** The caller lives on the host.
-  The runners drive Hermes the way a hand-run does (copy in, run over SSH on
-  port 22220, copy out), and never start or stop the VM, take snapshots, or
-  change Hermes's config.
+- **A Telegram gateway and Hermes's own scheduler run in the VM** (reversed
+  2026-11-04, was "No Hermes gateway and no cron in the VM. The caller lives
+  on the host."). Reason: Casey queues research from Telegram, mostly
+  overnight, and the result posts back there, which needs both inside the
+  VM. The runners still drive Hermes the way a hand-run does (copy in, run
+  over SSH on port 22220, copy out), and never start or stop the VM, take
+  snapshots, or change Hermes's config.
 - **Hermes never calls the hub,** holds no hub token, and never sees Jobhunt
   or SEO-LLM data. Every output still ends in a file Casey reviews.
 - **The runners need an SSH key for `hermes@localhost`,** because they never
@@ -274,6 +286,8 @@ and n8n, bound to 127.0.0.1) will schedule the jobs. It does not exist yet.
   gateway sends Hermes's output through that platform's servers. Keep anything
   Jobhunt-related as local files, or limit the gateway to the public-data jobs
   (1 to 3). Setting up a gateway (bot tokens, accounts) is Casey's to do.
+  Restated 2026-11-04 with the Telegram gateway: no Jobhunt data goes through
+  Telegram, and Hermes never touches Jobhunt or SEO-LLM.
 - **No publishing, submitting, or pushing.** Hermes does not post to WordPress,
   submit applications, or push to git. Every project reserves outward-facing
   actions for Casey, and an agent with self-written skills is not the exception.
@@ -405,7 +419,21 @@ durable home before it can be trusted to last. This repo is that home.
 |---|---|---|
 | This repo (tracked in git) | Everything below, and the VM's removal | Never by a VM action. It is the source for config copied into the VM. |
 | VM disk (`~/VMs`, including Hermes's own config, memory, and skills in the guest) | A normal shutdown and reboot | `--snapshot apply` rolls it back, a `--status-quo` session discards its changes at shutdown, and removing the VM deletes it |
-| VM snapshots (`clean`, `pre-update-2026-10-09`, `hermes-configured`, the last retaken on v0.21.6 on 2026-10-20) | Normal sessions and `--snapshot apply` | Deleted by name, or with the disk image when the VM is removed. Not tracked in git. |
+| VM snapshots (`clean`, `pre-update-2026-10-09`, `hermes-configured`, the last retaken on v0.22.7 on 2026-11-04 after a passing scout run) | Normal sessions and `--snapshot apply` | Deleted by name, or with the disk image when the VM is removed. Not tracked in git. |
+
+**The Telegram gateway's paths in the VM** (recorded 2026-11-04, before the
+first change, Phase 33):
+
+| Path in the VM | Holds | VM reboot | `--snapshot apply` | Rebuild |
+|---|---|---|---|---|
+| `~/.hermes/.env` | The bot token and the allowed user ID | Kept | Rolled back to the snapshot | Lost. Casey runs `hermes gateway setup` again |
+| `~/.hermes/config.yaml` | The Telegram toolsets and `telegram:` keys | Kept | Rolled back | Lost. The README's Telegram block re-applies them |
+| `~/.config/systemd/user/` | The gateway's service unit | Kept | Rolled back | Lost. `hermes gateway install` again |
+| `/var/lib/systemd/linger/hermes` | Starting the user service at boot with no login | Kept | Rolled back | Lost. `sudo loginctl enable-linger hermes` again |
+
+The token and the user ID have no copy in this repo by design (a secret,
+and an account identifier). Everything else has its durable copy in the
+README.
 
 **Rule:** a change made by hand inside the VM (Hermes `config.yaml`, a job or
 schedule definition, a reviewed skill) is copied into this repo in the same
@@ -442,7 +470,11 @@ router serves Hermes*.
 - 2026-11-04: `hermes update` moved it to `v0.22.7+144.gcad0aaa` (stable
   channel), with an `apt-get upgrade` of 22 guest packages (no new
   kernel). Every key set here survived, and `--oneshot`, `--toolsets` and
-  `--query-file` are still in `hermes chat --help`.
+  `--query-file` are still in `hermes chat --help`. A scout run on it
+  passed every check (10 ideas, 0 DEAD, 1 compaction). Its output format
+  changed: tool calls print as `💻 $ cmd` (no `┊` prefix), reasoning as
+  `∴ Thought for Ns`, and the reply without a box. The runner's scans
+  match text anywhere in a line, so they are unaffected.
 
 **Hermes config keys**
 - `auxiliary.background_review.enabled false`: on 2026-09-26 the post-run
@@ -474,6 +506,33 @@ router serves Hermes*.
   group's id in `~/scout/.hermes.pgid`, and a stopped run stops that group.
   A background job in a script ignores SIGINT, so the runner also kills its
   own ssh, or the lock would stay held until the session ended.
+
+**The Telegram gateway** (Phase 33, 2026-11-04)
+- Chosen over Discord: the same privacy (neither encrypts bot chats end to
+  end), a simpler setup. Signal was the private option, at the cost of a
+  phone number for the bot.
+- `platform_toolsets.telegram: []` gave no tools (`tool_turns=0`), and qwen
+  then printed the tool call it wanted as JSON text. Casey chose `[web]`:
+  real searches, and still no terminal or file. `hermes config set` writes
+  it as a block list (`- web`).
+- In a session whose history held those JSON replies, qwen repeated one
+  search until Hermes's guardrail stopped it (`identical_call_streak_halt`).
+  `/new` cleared it.
+- A sender not on the allowlist gets no reply and no log line at INFO.
+  `/setjoingroups` Disable leaves the bot out of any group it is added to.
+  `/skills pending` works in Telegram.
+- v0.22.7 runs `hermes chat --oneshot` inside a gateway (`platform=local`),
+  the running service when there is one. A runner's SIGTERM still stops
+  it: the gateway ended the turn one second later
+  (`reason=interrupted_by_user`).
+- The service starts at boot with no login (3 seconds after boot, with
+  linger). Hermes's own linger step fails without polkit, so `sudo
+  loginctl enable-linger hermes` does it. Telegram messages sent while the
+  gateway is down are dropped on its cold boot
+  (`drop_pending_on_cold_boot`), not queued.
+- Hermes's security audit found SSH password login on, and quickemu
+  forwards 22220 on all host interfaces (`0.0.0.0`). Password login is off
+  since 2026-11-04 (`/etc/ssh/sshd_config.d/10-no-password.conf`).
 
 **Topic scout checks**
 - The field check catches "Best ..." titles typed anything but `roundup`:

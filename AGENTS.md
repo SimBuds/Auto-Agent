@@ -1115,11 +1115,14 @@ repos, and one ended in a colon with no template after it.)
   around in the Hermes config. Hermes's `model.context_length` follows the
   router's served value. (2026-09-25. Context 65,536 until Local-LLM raised it
   on 2026-10-30, and Hermes followed on 2026-11-04.)
-- **Hermes gets no outward-facing capability.** The agent does not configure
-  Hermes to publish, submit, or push, and does not set up a messaging gateway
-  (bot tokens and accounts are Casey's). Jobhunt data never goes through a
-  gateway, because Jobhunt's rule is that no resume or job data leaves this
-  hardware. (2026-09-25)
+- **Hermes's one outward channel is Casey's Telegram gateway.** It carries
+  replies and night-task results to Casey's private chat and answers
+  Casey's user ID only. Hermes never publishes, submits, or pushes anywhere
+  else. Setting up the gateway and its token stay Casey's, and the agent
+  does not configure Hermes to publish, submit, or push. Jobhunt data never
+  goes through a gateway, because Jobhunt's rule is that no resume or job
+  data leaves this hardware. (2026-09-25. The Telegram gateway added
+  2026-11-04, Casey, chosen over Discord the same day.)
 - **A Hermes-written skill is reviewed as code before it is trusted or
   codified.** A skill is instructions Hermes reuses without asking, so an
   unread one is unreviewed code with the VM's full reach. (2026-09-25)

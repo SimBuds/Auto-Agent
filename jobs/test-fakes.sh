@@ -73,12 +73,25 @@ url=${!#}
 case $url in
   */health)    [ -e "$FAKE_ROUTER_DOWN" ] && exit 7; echo '{"status":"ok"}' ;;
   */v1/models) [ -e "$FAKE_ROUTER_DOWN" ] && exit 7
-               if [ "$FAKE_NO_QWEN" = 1 ]; then echo '{"data":[{"id":"gemma"}]}'; else echo '{"data":[{"id":"gemma"},{"id":"qwen"}]}'; fi ;;
+               # Each model's launch args carry its context, as the real router's do.
+               # FAKE_CTX sets qwen's (default 131072), FAKE_CTX=none drops it.
+               q='{"id":"qwen","status":{"value":"sleeping","args":["--ctx-size","'"${FAKE_CTX:-131072}"'"]}}'
+               [ "$FAKE_CTX" = none ] && q='{"id":"qwen","status":{"value":"sleeping","args":[]}}'
+               g='{"id":"gemma","status":{"value":"unloaded","args":["--ctx-size","131072"]}}'
+               if [ "$FAKE_NO_QWEN" = 1 ]; then echo '{"data":['"$g"']}'; else echo '{"data":['"$g,$q"']}'; fi ;;
   *)           code=200
                for m in $FAKE_URL_CODES; do [ "${m%=*}" = "$url" ] && code=${m##*=}; done
                printf %s "$code" ;;
 esac
 EOF
 printf '#!/bin/bash\nexit 0\n' > "$T/bin/sleep"
+# fake_hermes_config [CONTEXT]: the fake VM's Hermes config, with
+# model.context_length CONTEXT (default 131072), or none for no such line.
+fake_hermes_config() {
+  mkdir -p "$FAKE_VM/.hermes"
+  { echo 'model:'; echo '  default: qwen'
+    [ "${1:-131072}" = none ] || echo "  context_length: ${1:-131072}"
+    echo 'auxiliary:'; echo '  context_length: 999'; } > "$FAKE_VM/.hermes/config.yaml"
+}
 chmod +x "$T/bin/"*
 mv "$T/bin/hermes" "$T/hermes"

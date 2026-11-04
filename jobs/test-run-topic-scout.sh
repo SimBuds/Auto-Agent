@@ -21,6 +21,7 @@ fresh() {  # a clean temp repo, fake VM and call log
   mkdir -p "$R" "$FAKE_VM/.hermes/skills/demo" "$FAKE_VM/.local/bin"
   touch "$FAKE_VM/.hermes/skills/demo/SKILL.md" "$FAKE_CALLS"
   cp "$T/hermes" "$FAKE_VM/.local/bin/hermes"
+  fake_hermes_config
   cp -r "$JOBS" "$R/jobs"
   # A fixed seen list, so changes to the live one cannot move the results.
   printf '# Fixture seen list\n\ncat-water-fountain\n' > "$R/jobs/topic-scout-seen.txt"
@@ -148,6 +149,57 @@ fresh
 out=$(FAKE_NO_QWEN=1 run 2>&1); rc=$?
 [ $rc -eq 13 ] && [ "$(stop)" = "13 router" ] && ! hermes_ran && ok "qwen not served: exit 13 router" || bad "no qwen" "rc=$rc $(cat "$S" 2>&1)"
 
+# --- settings: AUTO_AGENT_* overrides reach the commands (a wrapper records
+# ssh's own arguments, which the fake drops) ---
+mkdir -p "$T/wrap"
+printf '#!/bin/bash\necho "args $*" >> "%s/ssh-args"\nexec "%s/bin/ssh" "$@"\n' "$T" "$T" > "$T/wrap/ssh"
+chmod +x "$T/wrap/ssh"
+wrun() { PATH="$T/wrap:$T/bin:$PATH" bash "$R/jobs/run-topic-scout.sh"; }
+fresh; rm -f "$T/ssh-args"
+out=$(AUTO_AGENT_VM=tester@vm.example.test AUTO_AGENT_SSH_PORT=2299 FAKE_SSH=down wrun 2>&1); rc=$?
+grep -q -- '-p 2299 .* tester@vm.example.test true$' "$T/ssh-args" && [ $rc -eq 13 ] \
+  && ok "AUTO_AGENT_VM and AUTO_AGENT_SSH_PORT reach ssh" || bad "vm and port" "rc=$rc $(cat "$T/ssh-args" 2>&1)"
+
+fresh
+out=$(AUTO_AGENT_ROUTER=http://10.0.2.9:9999 run 2>&1); rc=$?
+[ $rc -eq 0 ] && grep -q '^ssh curl -s --max-time 10 http://10.0.2.9:9999/health' "$FAKE_CALLS" \
+  && ok "AUTO_AGENT_ROUTER reaches the router probe" || bad "router url" "rc=$rc $(grep curl "$FAKE_CALLS")"
+
+fresh
+out=$(AUTO_AGENT_MODEL=gemma FAKE_NO_QWEN=1 run 2>&1); rc=$?
+[ $rc -eq 0 ] && ok "AUTO_AGENT_MODEL=gemma passes the probe without qwen" || bad "model gemma" "rc=$rc $(cat "$S" 2>&1)"
+fresh
+out=$(AUTO_AGENT_MODEL=nomodel run 2>&1); rc=$?
+[ $rc -eq 13 ] && [ "$(stop)" = "13 router" ] && ok "AUTO_AGENT_MODEL not served: exit 13 router" || bad "model missing" "rc=$rc $(cat "$S" 2>&1)"
+
+fresh
+out=$(AUTO_AGENT_SSH_PORT=22x run 2>&1); rc=$?
+[ $rc -eq 10 ] && [ "$(stop)" = "10 input" ] && [[ $(j "$S" 'd["missing"][0]["message"]') == *AUTO_AGENT_SSH_PORT* ]] && ! grep -q '^ssh ' "$FAKE_CALLS" \
+  && ok "a non-numeric port: exit 10 input, no ssh" || bad "bad port" "rc=$rc $(cat "$FAKE_CALLS") $(cat "$S" 2>&1)"
+
+# --- context: Hermes's model.context_length must equal what the router serves
+# for the model (AGENTS.md: context length is checked, never assumed) ---
+ctx_msg() { j "$S" 'd["missing"][0]["message"]'; }
+fresh
+out=$(run 2>&1); rc=$?
+[ $rc -eq 0 ] && grep -q 'context: Hermes 131072, router 131072 (qwen)' "$R/out/scout/run.log" \
+  && ok "context equal: run goes on, both values logged" || bad "context equal" "rc=$rc $(grep context: "$R/out/scout/run.log")"
+for c in 262144 65536; do
+  fresh; fake_hermes_config $c
+  out=$(run 2>&1); rc=$?
+  [ $rc -eq 10 ] && [ "$(stop)" = "10 input" ] && ! hermes_ran \
+    && [[ $(ctx_msg) == *"is $c"*"serves 131072"*"hermes config set model.context_length 131072"* ]] \
+    && ok "Hermes context $c against 131072: exit 10, fix named" || bad "context $c" "rc=$rc $(cat "$S" 2>&1)"
+done
+fresh; fake_hermes_config none
+out=$(run 2>&1); rc=$?
+[ $rc -eq 10 ] && ! hermes_ran && [[ $(ctx_msg) == *"not set"* ]] \
+  && ok "Hermes context unset: exit 10" || bad "context unset" "rc=$rc $(cat "$S" 2>&1)"
+fresh
+out=$(FAKE_CTX=none run 2>&1); rc=$?
+[ $rc -eq 10 ] && ! hermes_ran && [[ $(ctx_msg) == *"router reports no context"* ]] \
+  && ok "router serves no context for the model: exit 10" || bad "router no ctx" "rc=$rc $(cat "$S" 2>&1)"
+
 fresh
 out=$(FAKE_SSH=127 run 2>&1); rc=$?
 [ $rc -eq 10 ] && [ "$(stop)" = "10 hermes_not_on_path" ] && [[ $(j "$S" 'd["missing"][0]["message"]') == "hermes not found on PATH"* ]] \
@@ -165,7 +217,7 @@ out=$(FAKE_SSH=drop run 2>&1); rc=$?
 
 # Keepalive: ssh gives up on a dead VM in about a minute instead of waiting
 # forever. ssh -G reads the options only and connects to nothing.
-VM=hermes@localhost
+VM=hermes@localhost PORT=22220
 eval "$(grep '^SSH=' "$R/jobs/runner-lib.sh")"
 G=$(/usr/bin/ssh -G "${SSH[@]:1}" 2>&1)
 grep -qx 'serveraliveinterval 15' <<<"$G" && grep -qx 'serveralivecountmax 4' <<<"$G" \

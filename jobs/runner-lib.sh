@@ -3,12 +3,17 @@
 # file, which defines the VM commands, takes the lock and sets the traps.
 # Moved verbatim from run-topic-scout.sh (Phase 19, 2026-11-03).
 
-VM=hermes@localhost
+# Settings, each with an environment override (README, How to tailor). The
+# prefix keeps clear of Hermes's own HERMES_* variables.
+VM=${AUTO_AGENT_VM:-hermes@localhost}
+PORT=${AUTO_AGENT_SSH_PORT:-22220}
+ROUTER=${AUTO_AGENT_ROUTER:-http://10.0.2.2:8080}
+MODEL=${AUTO_AGENT_MODEL:-qwen}
 # The README's commands, plus BatchMode so a missing key fails instead of
 # prompting, and a keepalive so a VM that rebooted mid-session ends the session
 # in about a minute (on 2026-11-03 a guest reboot left one waiting 2.5 hours).
-SSH=(ssh -p 22220 -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 "$VM")
-SCP=(scp -P 22220 -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
+SSH=(ssh -p "$PORT" -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 "$VM")
+SCP=(scp -P "$PORT" -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
 # Each Hermes session runs in its own process group in the VM, with the group's
 # id in ~/scout/.hermes.pgid, because sshd does not signal a command that has no
 # terminal when the client goes away, so a stopped run must stop Hermes itself.
@@ -22,7 +27,6 @@ rc=$?; rm -f ~/scout/.hermes.pgid; exit $rc'
 STOP_CMD='f=~/scout/.hermes.pgid
 for i in 1 2 3; do [ -s "$f" ] && break; sleep 1; done
 if [ -s "$f" ]; then kill -TERM -- "-$(cat "$f")" && echo "stopped Hermes process group $(cat "$f")"; rm -f "$f"; else echo "no Hermes session to stop"; fi'
-ROUTER=http://10.0.2.2:8080
 
 # One lock for every Hermes job, because they share the VM and the GPU. The
 # kernel drops it when the run's last process exits, so it never goes stale.
@@ -40,6 +44,7 @@ MISSING=()   # on 10, one "path<TAB>message" entry per input, path empty when th
 REASON=""    # the first line Hermes's scanner refused, which makes the run an 11
 IN_SESSION=""  # set while a Hermes session runs in the VM
 SESSION_PID=""  # the local ssh running that session
+ROUTER_OUT=""   # the last router probe's output, read by check_context
 
 log() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" | tee -a "$LOG"; }
 
@@ -102,16 +107,17 @@ finish() {
 }
 
 # router_up: README setup step 4's two checks, run in the VM. Returns 0 when the
-# router answers ok and lists qwen, 1 when it does not, 2 when SSH itself failed.
+# router answers ok and lists MODEL, 1 when it does not, 2 when SSH itself failed.
 router_up() {
   local out rc
   log "step: router probe"
   out=$("${SSH[@]}" "curl -s --max-time 10 $ROUTER/health; echo; curl -s --max-time 10 $ROUTER/v1/models" 2>&1)
   rc=$?
   printf '%s\n' "$out" >>"$LOG"
+  ROUTER_OUT=$out
   log "router probe exit=$rc"
   [ $rc -eq 255 ] && return 2
-  grep -q '"status": *"ok"' <<<"$out" && grep -q '"id": *"qwen"' <<<"$out" && return 0
+  grep -q '"status": *"ok"' <<<"$out" && grep -q -E "\"id\": *\"$MODEL\"" <<<"$out" && return 0
   return 1
 }
 
@@ -139,7 +145,7 @@ session() {
   fi
   [ $rc -eq 0 ] && return 0
   if [ $rc -eq 127 ]; then
-    MISSING+=("	hermes not found on PATH over non-interactive SSH (exit 127). Compare: ssh -p 22220 $VM 'bash -ic \"command -v hermes\"'")
+    MISSING+=("	hermes not found on PATH over non-interactive SSH (exit 127). Compare: ssh -p $PORT $VM 'bash -ic \"command -v hermes\"'")
     finish 10 hermes_not_on_path
   fi
   [ $rc -eq 255 ] && finish 13 vm
@@ -160,7 +166,7 @@ on_signal() {
     "${SSH[@]}" "$STOP_CMD" >>"$LOG" 2>&1
     rc=$?
     log "stop Hermes exit=$rc"
-    [ $rc -eq 0 ] || log "ERROR: could not stop Hermes in the VM. Check it with: ssh -p 22220 $VM 'pgrep -u hermes -a'"
+    [ $rc -eq 0 ] || log "ERROR: could not stop Hermes in the VM. Check it with: ssh -p $PORT $VM 'pgrep -u hermes -a'"
     kill "$SESSION_PID" >>"$LOG" 2>&1
     wait "$SESSION_PID"
   fi
@@ -172,6 +178,10 @@ trap 'on_signal 130 interrupted' INT
 # probe_vm: SSH to the VM, then the router from inside it. Exits 10 (no SSH
 # key), 13 vm or 13 router.
 probe_vm() {
+  if ! [[ $PORT =~ ^[0-9]+$ ]]; then
+    MISSING+=("	AUTO_AGENT_SSH_PORT is '$PORT', not a port number")
+    finish 10 input
+  fi
   log "step: SSH probe"
   OUTPUT=$("${SSH[@]}" true 2>&1)
   RC=$?
@@ -179,11 +189,49 @@ probe_vm() {
   log "SSH probe exit=$RC"
   if [ $RC -ne 0 ]; then
     if grep -q 'Permission denied' <<<"$OUTPUT"; then
-      MISSING+=("	no SSH key for $VM. Install one with: ssh-copy-id -p 22220 $VM")
+      MISSING+=("	no SSH key for $VM. Install one with: ssh-copy-id -p $PORT $VM")
       finish 10 input
     fi
     finish 13 vm
   fi
   router_up
   case $? in 1) finish 13 router ;; 2) finish 13 vm ;; esac
+  check_context
+}
+
+# check_context: Hermes's model.context_length must equal the context the router
+# serves for MODEL (the --ctx-size in its launch args, present even when it is
+# unloaded, or n_ctx once loaded). Hermes compacts against its own number, so a
+# wrong one either compacts early or sends requests the router refuses. Exits 10
+# on a mismatch or a missing value, 13 vm if SSH fails.
+check_context() {
+  local served hermes rc
+  served=$(python3 -c '
+import json, sys
+for line in sys.stdin:
+    try:
+        d = json.loads(line)
+    except ValueError:
+        continue
+    for m in d.get("data", []) if isinstance(d, dict) else []:
+        if m.get("id") != sys.argv[1]:
+            continue
+        a = (m.get("status") or {}).get("args") or []
+        if "--ctx-size" in a[:-1]:
+            print(a[a.index("--ctx-size") + 1])
+        elif (m.get("meta") or {}).get("n_ctx"):
+            print(m["meta"]["n_ctx"])
+' "$MODEL" <<<"$ROUTER_OUT")
+  hermes=$("${SSH[@]}" 'awk '\''/^model:/ { m = 1; next } /^[^ #]/ { m = 0 } m && /^  context_length:/ { print $2 }'\'' ~/.hermes/config.yaml' 2>>"$LOG")
+  rc=$?
+  [ $rc -eq 255 ] && finish 13 vm
+  log "context: Hermes ${hermes:-unset}, router ${served:-unknown} ($MODEL)"
+  if ! [[ $served =~ ^[0-9]+$ ]]; then
+    MISSING+=("	the router reports no context for $MODEL (no --ctx-size or n_ctx in $ROUTER/v1/models)")
+  elif ! [[ $hermes =~ ^[0-9]+$ ]]; then
+    MISSING+=("	Hermes model.context_length is not set in ~/.hermes/config.yaml. The router serves $served for $MODEL. Set it in the VM: hermes config set model.context_length $served")
+  elif [ "$hermes" != "$served" ]; then
+    MISSING+=("	Hermes model.context_length is $hermes, but the router serves $served for $MODEL. Set it in the VM: hermes config set model.context_length $served")
+  fi
+  [ ${#MISSING[@]} -eq 0 ] || finish 10 input
 }

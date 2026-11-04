@@ -177,21 +177,23 @@ ssh -p 22220 -o BatchMode=yes hermes@localhost true; echo "key check exit=$?"   
 - RAM, cores and disk are the three lines in setup step 2. 6 GB and 4 cores
   leave room for a model that offloads to the CPU. More can push the host
   into swap.
-- A different port or user: change them in your SSH commands and in
-  `jobs/runner-lib.sh` (`VM=` and the `-p 22220` / `-P 22220` in the `SSH`
-  and `SCP` lines). The runners read nothing else about the VM.
+- A different port or user: use them in your SSH commands, and set
+  `AUTO_AGENT_VM` (default `hermes@localhost`) and `AUTO_AGENT_SSH_PORT`
+  (default `22220`) for the runners. They read nothing else about the VM.
 
 ### Router and models
 
-- Base URL: `model.base_url` in setup step 6, and `ROUTER=` in
-  `jobs/runner-lib.sh`, which each run probes from inside the VM.
+- Base URL: `model.base_url` in setup step 6, and `AUTO_AGENT_ROUTER`
+  (default `http://10.0.2.2:8080`), which each run probes from inside the
+  VM.
 - Model: `model.default`. Pin one, so Hermes never makes the router swap
-  models. The runners' probe also checks that `qwen` is listed
-  (`router_up` in `jobs/runner-lib.sh`).
+  models. Set `AUTO_AGENT_MODEL` (default `qwen`) to the same name: each run
+  checks the router lists it.
 - Context: `model.context_length` must match what the router serves. Read it
   with `curl -s http://127.0.0.1:8080/v1/models` (`--ctx-size` in each
   model's `args`, or `n_ctx` once it is loaded). Below 512K, Hermes compacts
-  the conversation at 75% of it, so a smaller value compacts sooner.
+  the conversation at 75% of it, so a smaller value compacts sooner. Each
+  run compares the two and exits 10 on a mismatch, naming the fix.
 
 **Router-only network (optional).** To stop the VM reaching anything else
 on the host's loopback, add this line to the VM's `.conf`, then use
@@ -309,7 +311,7 @@ Both runners share these. A scheduler retries only 13 and 14.
 | Exit | Meaning | `status.json` |
 | --- | --- | --- |
 | 0 | Done and checked. Review any `warn` in `checks` | Written |
-| 10 | Missing input: a job file, `NEWS_CONTACT`, the profile, the SSH key, or `hermes` on the VM's `PATH` (`missing` names each) | Written |
+| 10 | Missing input or a setup fault: a job file, `NEWS_CONTACT`, the profile, the SSH key, `hermes` on the VM's `PATH`, or Hermes's context not matching the router's (`missing` names each) | Written |
 | 11 | Hermes's scanner refused a command. `reason` holds the line | Written |
 | 12 | A step or check failed. Read `run.log` | Written |
 | 13 | A service is down: the VM (`vm`, including a session whose connection dropped), the router (`router`), or every news source (`network`). Retry later | Written |
@@ -359,8 +361,8 @@ The tests run on the host with fakes for the VM, the router and the network:
 
 ```bash
 # Runs in: local terminal, host, in this repo. Each must end with failed=0 and exit 0.
-bash jobs/test-run-topic-scout.sh    # passed=44
-bash jobs/test-run-news-digest.sh    # passed=23
+bash jobs/test-run-topic-scout.sh    # passed=54
+bash jobs/test-run-news-digest.sh    # passed=24
 bash jobs/test-add-idea.sh           # passed=37
 bash jobs/test-add-rating.sh         # passed=57
 python3 jobs/test-news-collect.py    # passed=36

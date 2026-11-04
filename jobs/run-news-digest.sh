@@ -33,7 +33,7 @@ remove_profile() {
     CHECKS+=("profile	pass	removed from the VM")
     return 0
   fi
-  CHECKS+=("profile	fail	may still be in the VM. Remove it: ssh -p 22220 $VM 'rm ~/news/CASEY-INTERESTS.md'")
+  CHECKS+=("profile	fail	may still be in the VM. Remove it: ssh -p $PORT $VM 'rm ~/news/CASEY-INTERESTS.md'")
   return 1
 }
 before_finish() { remove_profile; }

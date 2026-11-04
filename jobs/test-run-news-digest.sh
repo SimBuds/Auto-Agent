@@ -99,6 +99,7 @@ fresh() {  # a clean temp repo, fake VM and call log
   mkdir -p "$R" "$FAKE_VM/.hermes/skills" "$FAKE_VM/.local/bin"
   touch "$FAKE_CALLS"
   cp "$T/hermes" "$FAKE_VM/.local/bin/hermes"
+  fake_hermes_config
   cp -r "$JOBS" "$R/jobs"
   cp "$T/news-collect.py" "$R/jobs/news-collect.py"
 }
@@ -193,6 +194,10 @@ out=$(FAKE_PIN_PROFILE=1 run 2>&1); rc=$?
 fresh
 out=$(FAKE_SSH=down run 2>&1); rc=$?
 [ $rc -eq 13 ] && [ "$(stop)" = "13 vm" ] && ! hermes_ran && ok "VM down: exit 13 vm" || bad "VM down" "rc=$rc $(cat "$S" 2>&1)"
+fresh; fake_hermes_config 65536
+out=$(run 2>&1); rc=$?
+[ $rc -eq 10 ] && [ "$(stop)" = "10 input" ] && ! hermes_ran && ! grep -q 'CASEY-INTERESTS' "$FAKE_CALLS" \
+  && ok "context mismatch: exit 10 before the profile goes in" || bad "news context" "rc=$rc $(cat "$S" 2>&1)"
 fresh
 touch "$FAKE_ROUTER_DOWN"
 out=$(run 2>&1); rc=$?

@@ -1109,10 +1109,12 @@ repos, and one ended in a colon with no template after it.)
   `/health` and `/v1/models`, `llm status`, `journalctl`, `quickemu --version`)
   are the agent's own job. (2026-09-25)
 - **The router is Local-LLM's contract, consumed here and never changed from
-  here.** Port 8080, the model names `gemma`, `qwen`, and `lite`, and the 65,536
-  context are fixed by Local-LLM for Jobhunt and SEO-LLM as well. A need to
-  change any of them is raised as a Local-LLM change, not worked around in the
-  Hermes config. (2026-09-25)
+  here.** Port 8080, the model names `gemma`, `qwen`, and `lite`, and the
+  131,072 context are fixed by Local-LLM for Jobhunt and SEO-LLM as well. A
+  need to change any of them is raised as a Local-LLM change, not worked
+  around in the Hermes config. Hermes's `model.context_length` follows the
+  router's served value. (2026-09-25. Context 65,536 until Local-LLM raised it
+  on 2026-10-30, and Hermes followed on 2026-11-04.)
 - **Hermes gets no outward-facing capability.** The agent does not configure
   Hermes to publish, submit, or push, and does not set up a messaging gateway
   (bot tokens and accounts are Casey's). Jobhunt data never goes through a

@@ -120,7 +120,7 @@ hermes config set model.provider custom
 hermes config set model.base_url http://10.0.2.2:8080/v1
 hermes config set model.default qwen
 hermes config set model.api_key local
-hermes config set model.context_length 65536
+hermes config set model.context_length 131072
 hermes config set skills.write_approval true
 hermes config set auxiliary.background_review.enabled false
 sed -n '/^model:/,/^[a-z_]*:/p' ~/.hermes/config.yaml | grep -v '^ *#' | grep -v '^ *$'
@@ -134,15 +134,15 @@ this block is their durable copy (see *Persistence split* in PLAN.md). The
 five `model.*` keys replace the interactive `hermes model` picker, and the
 result is the same.
 
-| Key | Value | Why |
-|---|---|---|
-| `model.provider` | `custom` | Any OpenAI-compatible server (`llamacpp` is an alias) |
-| `model.base_url` | `http://10.0.2.2:8080/v1` | The host's router, through QEMU's address for the host |
-| `model.default` | `qwen` | One pinned model, so Hermes never makes the router swap |
-| `model.api_key` | `local` | Placeholder. The router has no auth. |
-| `model.context_length` | `65536` | The router's fixed context, stated rather than guessed |
-| `auxiliary.background_review.enabled` | `false` | Turns off the post-run review that drafts skills and writes memory notes on its own. On 2026-09-26 it drafted a new `topic-scout` skill after four runs in a row, each a partial copy of `jobs/topic-scout.md`. `/refine` still runs a review by hand. (Hermes's example config names `skills.creation_nudge_interval` for this, but v0.21.5 does not recognize that key.) |
-| `skills.write_approval` | `true` | Skills Hermes writes, including from its post-run self-improvement review, wait in `~/.hermes/pending/skills/` until approved with `/skills pending` and `/skills approve`. On 2026-09-25 it wrote one unasked, and it was truncated mid-command. |
+| Key                                     | Value                       | Why                                                                                                                                                                                                                                                                                                                                                                                |
+| --------------------------------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `model.provider`                      | `custom`                  | Any OpenAI-compatible server (`llamacpp` is an alias)                                                                                                                                                                                                                                                                                                                            |
+| `model.base_url`                      | `http://10.0.2.2:8080/v1` | The host's router, through QEMU's address for the host                                                                                                                                                                                                                                                                                                                             |
+| `model.default`                       | `qwen`                    | One pinned model, so Hermes never makes the router swap                                                                                                                                                                                                                                                                                                                            |
+| `model.api_key`                       | `local`                   | Placeholder. The router has no auth.                                                                                                                                                                                                                                                                                                                                               |
+| `model.context_length`                | `131072`                  | The router's fixed context (131,072 since Local-LLM raised it on 2026-10-30), stated rather than guessed                                                                                                                                                                                                                                                                                                                             |
+| `auxiliary.background_review.enabled` | `false`                   | Turns off the post-run review that drafts skills and writes memory notes on its own. On 2026-09-26 it drafted a new `topic-scout` skill after four runs in a row, each a partial copy of `jobs/topic-scout.md`. `/refine` still runs a review by hand. (Hermes's example config names `skills.creation_nudge_interval` for this, but v0.21.5 does not recognize that key.) |
+| `skills.write_approval`               | `true`                    | Skills Hermes writes, including from its post-run self-improvement review, wait in `~/.hermes/pending/skills/` until approved with `/skills pending` and `/skills approve`. On 2026-09-25 it wrote one unasked, and it was truncated mid-command.                                                                                                                            |
 
 The managed local runtime (`local_runtime` in `config.yaml`) is disabled by
 default and stays that way. The router already serves the models on the GPU,
@@ -431,17 +431,17 @@ The terminal shows only the step lines. Every command's output, Hermes's
 replies included, is appended to `out/scout/run.log`. Follow a run with
 `tail -f out/scout/run.log`.
 
-| Exit | Meaning | `status.json` |
-| --- | --- | --- |
-| 0 | The file is pulled, the field check passed and no URL is DEAD. Review it, starting with any `warn` in `checks` | Written |
-| 10 | A job file is missing, there is no SSH key, or `hermes` was not found over SSH (`stop_reason` `hermes_not_on_path`). Each is named in `missing` | Written |
-| 11 | Hermes's scanner refused a command (`BLOCKED` or `could not be resolved`). `reason` holds the line. Decide what the job may run | Written |
-| 12 | A step failed, the sweep found no file, the field check failed, or a URL is DEAD. Read `run.log` | Written |
-| 13 | The VM did not answer SSH (`vm`), or the router is down or not serving `qwen` (`router`). Run again later | Written |
-| 14 | Another Hermes job holds the lock. Nothing was run or written | None |
-| 143 | Stopped by SIGTERM (see below) | Written |
-| 130 | Stopped by SIGINT (Ctrl+C on a hand-run). The hub never retries it | Written |
-| 2 | Called with an argument | None |
+| Exit | Meaning                                                                                                                                                 | `status.json` |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- |
+| 0    | The file is pulled, the field check passed and no URL is DEAD. Review it, starting with any `warn` in `checks`                                      | Written         |
+| 10   | A job file is missing, there is no SSH key, or `hermes` was not found over SSH (`stop_reason` `hermes_not_on_path`). Each is named in `missing` | Written         |
+| 11   | Hermes's scanner refused a command (`BLOCKED` or `could not be resolved`). `reason` holds the line. Decide what the job may run                   | Written         |
+| 12   | A step failed, the sweep found no file, the field check failed, or a URL is DEAD. Read `run.log`                                                      | Written         |
+| 13   | The VM did not answer SSH (`vm`), or the router is down or not serving `qwen` (`router`). Run again later                                         | Written         |
+| 14   | Another Hermes job holds the lock. Nothing was run or written                                                                                           | None            |
+| 143  | Stopped by SIGTERM (see below)                                                                                                                          | Written         |
+| 130  | Stopped by SIGINT (Ctrl+C on a hand-run). The hub never retries it                                                                                      | Written         |
+| 2    | Called with an argument                                                                                                                                 | None            |
 
 A refusal outranks a later failure or a pass, because only a person can
 clear it, and a failure after one is most likely its result. When a session
@@ -474,16 +474,16 @@ killed or crashed. Its keys follow SEO-LLM's `status.json`:
 }
 ```
 
-| Key | What it holds |
-| --- | --- |
-| `job`, `exit_code` | The job, and the same exit code the process returned |
-| `stop_reason` | `input` or `hermes_not_on_path` (10), `decision` (11), `failed` (12), `vm`, `router` or `network` (13, `network` for the news job only), `terminated` (143), `interrupted` (130), or `null` when it finished |
-| `finished_at` | When the file was written, in UTC |
-| `outputs` | The pulled file's absolute path, or an empty list when none was pulled |
-| `checks` | `sweep` (only when it found no file), `skills`, `fields` and `urls`, each with `result` `pass`, `warn` or `fail` and a one-line `detail` |
-| `missing` | On 10 only: each thing to supply, with its absolute `path` (`null` when it is not a file) and a `message` |
-| `reason` | On 11 only: the session and the line the scanner refused |
-| `log` | The absolute path to `run.log` |
+| Key                    | What it holds                                                                                                                                                                                                                      |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `job`, `exit_code` | The job, and the same exit code the process returned                                                                                                                                                                               |
+| `stop_reason`        | `input` or `hermes_not_on_path` (10), `decision` (11), `failed` (12), `vm`, `router` or `network` (13, `network` for the news job only), `terminated` (143), `interrupted` (130), or `null` when it finished |
+| `finished_at`        | When the file was written, in UTC                                                                                                                                                                                                  |
+| `outputs`            | The pulled file's absolute path, or an empty list when none was pulled                                                                                                                                                             |
+| `checks`             | `sweep` (only when it found no file), `skills`, `fields` and `urls`, each with `result` `pass`, `warn` or `fail` and a one-line `detail`                                                                         |
+| `missing`            | On 10 only: each thing to supply, with its absolute `path` (`null` when it is not a file) and a `message`                                                                                                                    |
+| `reason`             | On 11 only: the session and the line the scanner refused                                                                                                                                                                           |
+| `log`                | The absolute path to `run.log`                                                                                                                                                                                                   |
 
 Every key is always present.
 
@@ -651,16 +651,16 @@ would have exited 0 exits 12. The candidates file is named by the
 collector's UTC date, which the runner reads from the collector's output, so
 `DAY` in steps 2 and 4 may be a day off from `date +%F` near midnight.
 
-| Exit | Meaning | `status.json` |
-| --- | --- | --- |
-| 0 | Every item is rated, the digest and ratings are pulled, and the profile is out of the VM. A `warn` on `collect` means one or more sources FAILED and the rest were rated | Written |
-| 10 | `NEWS_CONTACT` is empty, the profile or a job file is missing, there is no SSH key, or `hermes` was not found over SSH. Each is named in `missing` | Written |
-| 11 | Hermes's scanner refused a command. `reason` holds the line | Written |
-| 12 | A step failed, the collector failed, some items are still unrated (the digest is pulled anyway), or the profile could not be removed. Read `run.log` | Written |
-| 13 | Every source FAILED (`network`, no internet), the VM did not answer (`vm`), or the router is down or not serving `qwen` (`router`). Run again later | Written |
-| 14 | Another Hermes job holds the lock. Nothing was run or written | None |
-| 143, 130 | Stopped by SIGTERM or SIGINT, as for the topic scout | Written |
-| 2 | Called with an argument | None |
+| Exit     | Meaning                                                                                                                                                                      | `status.json` |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- |
+| 0        | Every item is rated, the digest and ratings are pulled, and the profile is out of the VM. A `warn` on `collect` means one or more sources FAILED and the rest were rated | Written         |
+| 10       | `NEWS_CONTACT` is empty, the profile or a job file is missing, there is no SSH key, or `hermes` was not found over SSH. Each is named in `missing`                     | Written         |
+| 11       | Hermes's scanner refused a command. `reason` holds the line                                                                                                                | Written         |
+| 12       | A step failed, the collector failed, some items are still unrated (the digest is pulled anyway), or the profile could not be removed. Read `run.log`                       | Written         |
+| 13       | Every source FAILED (`network`, no internet), the VM did not answer (`vm`), or the router is down or not serving `qwen` (`router`). Run again later                  | Written         |
+| 14       | Another Hermes job holds the lock. Nothing was run or written                                                                                                                | None            |
+| 143, 130 | Stopped by SIGTERM or SIGINT, as for the topic scout                                                                                                                         | Written         |
+| 2        | Called with an argument                                                                                                                                                      | None            |
 
 `checks` holds `collect`, `digest` and `profile`, each `pass`, `warn` or
 `fail` with a one-line `detail`, and `outputs` holds the digest and the

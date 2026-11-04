@@ -359,9 +359,14 @@ lower absolute scores expected here.
 - Give the VM **6 GB of RAM and 4 cores**. More RAM pushes the host into swap
   while `qwen` is loaded. The MoE layers use the host's CPU, so every busy VM
   core slows generation.
-- **Context is fixed at 65,536 tokens.** Hermes's own system prompt and its 34
-  tool definitions take 15.6K of it (24%, measured 2026-09-25), which leaves
-  about 50K for the work. Trimming unused toolsets is the way to get more room
+- **Context is fixed at 131,072 tokens** (65,536 until Local-LLM raised it on
+  2026-10-30, and Hermes's `model.context_length` followed on 2026-11-04).
+  Hermes's own system prompt and its 34 tool definitions take 15.6K of it
+  (12%, measured 2026-09-25 as 24% of 65,536). Hermes compacts at 75% of the
+  context for models under 512K (its `compression.threshold` 0.50 is
+  floored there), so at about 98K tokens, against about 49K before. At
+  65,536 every full scout research session compacted 2 or 3 times
+  (2026-11-03). Trimming unused toolsets is the way to get more room
   without touching the router, and `--toolsets` does it per job: the topic
   scout's two sessions start at 6.9K and 6.0K tokens. An oversized request gets HTTP 400 from
   the router rather than being truncated, and Hermes's docs say it compacts the
@@ -399,7 +404,69 @@ that codifies one.
 
 The step-by-step setup (check the host, build the VM, install Hermes, point it
 at the router, snapshots, everyday use, removal) is in
-[`README.md`](README.md#setup-guide-hermes-in-a-quickemu-debian-vm).
+[`README.md`](README.md#setup-guide-hermes-in-a-quickemu-debian-vm). The
+findings behind its settings are here, so the README can stay short. The job
+findings are under Good fits #1 and #6, and the router's under *How the
+router serves Hermes*.
+
+**The VM and the install**
+- The Debian install leaves the root password blank, so Debian installs
+  `sudo` and grants it to the first user, which the router check relies on.
+  quickemu forwarded SSH to host port 22220 on 2026-09-25, recorded in the
+  VM's `.ports` file.
+- `install.sh --non-interactive` skips `hermes setup` (API keys) and
+  `hermes gateway install` (the messaging gateway service). The endpoint is
+  set by `hermes config set` instead, and the gateway stays off.
+- Versions: v0.21.5 (`v0.21.5+2367.g5dcfd72`, Python 3.14.7) on 2026-09-25.
+  `hermes update`, which follows `main`, moved it to `v0.21.6+337.g26610b0`
+  on 2026-10-09. The config migration from schema 46 to 50 asked nothing
+  and kept every key set here, and the first check and a news digest run
+  passed on it (2026-10-20). The update also tries to install cua-driver,
+  the computer-use tool, which fails on a missing `libXi.so.6` and cannot
+  run in a VM with no desktop anyway.
+
+**Hermes config keys**
+- `auxiliary.background_review.enabled false`: on 2026-09-26 the post-run
+  review drafted a new `topic-scout` skill after four runs in a row, each a
+  partial copy of `jobs/topic-scout.md`. `/refine` still runs a review by
+  hand. Hermes's example config names `skills.creation_nudge_interval` for
+  this, but v0.21.5 does not recognize that key.
+- `skills.write_approval true`: on 2026-09-25 Hermes wrote a skill unasked,
+  and it was truncated mid-command. Skills now wait in
+  `~/.hermes/pending/skills/` until approved.
+
+**How a job session runs**
+- One session doing research and the sweep ran out of room: run 11
+  (2026-09-26) skipped most finishing steps after 39 minutes of research,
+  and used `execute_code` five times against the prompt. Hence two
+  sessions, each limited by `--toolsets`.
+- Without `--oneshot`, `--query-file` on a real terminal leaves the session
+  open for a follow-up, so a chained second session only starts after
+  Ctrl+C.
+- When the prompt arrived through `read_file`, two of three runs lost its
+  rules after compression and wrote an improvised file to the wrong path.
+- A command run over SSH gets the VM's system `PATH`, which lacks
+  `~/.local/bin`, where the installer put `hermes` (2026-11-03). The runner
+  puts that directory first.
+- sshd does not signal a command with no terminal when its client goes
+  away, so killing the ssh client leaves Hermes running in the VM, holding
+  the GPU. Each session therefore runs in its own process group, with the
+  group's id in `~/scout/.hermes.pgid`, and a stopped run stops that group.
+  A background job in a script ignores SIGINT, so the runner also kills its
+  own ssh, or the lock would stay held until the session ended.
+
+**Topic scout checks**
+- The field check catches "Best ..." titles typed anything but `roundup`:
+  run 16 relabelled 8 of 10, and run 21 retitled one "How to Choose the
+  Best ...".
+- `UNVERIFIED` covers 401, 402, 403 and 429 because on 2026-09-26
+  catster.com, nytimes.com (Wirecutter), consumerreports.org, purina.com and
+  dailypaws.com answered 403 or 402 even for a made-up path. It covers 5xx
+  because on 2026-11-03 three pages that answered 500 answered 200 half an
+  hour later.
+- The runner starts today's file and LEFT itself before research, because
+  on 2026-11-03 Hermes skipped the prompt's step 1 on a second run the same
+  day and added to the earlier run's ideas.
 
 ---
 

@@ -95,6 +95,21 @@ approves every stage by hand.
      ideas, 7 timely, 0 dead URLs, 17 minutes of research and 2 of sweep),
      yet no check can tell a real event link from a pretext, or a retailer
      listing from an article.
+   - **Scheduled through the runner, accepted 2026-11-04** (Phase 22). Batch
+     1 (2026-11-03, 6 runs 15 minutes apart) passed 2 of 6: research reused
+     an earlier run's file the same day (fixed: the runner starts the file),
+     and the URL check read three passing 500s as DEAD (fixed: 5xx is
+     UNVERIFIED). Batch 2, after both fixes and with Hermes at 131,072
+     context, exited 0 in 6 of 6: 10 ideas in five runs, 0 DEAD URLs, no
+     refusal, no new skill, research 4 to 15 minutes, `qwen` asleep after.
+     Compactions per research session fell from 2 or 3 to 0 or 1. Run 5
+     stopped at 5 ideas: after 7 searches and no compaction, qwen took its
+     prompt for a fresh system prompt, replied "I'm ready", and ended the
+     session. The field check allows fewer than 10 (never pad), so the run
+     passed. Over SSH without a terminal, `--oneshot` still logs reasoning,
+     tool lines and replies, so refusals would show in `run.log`. A guest
+     reboot mid-session hung a run until QEMU exited (Phase 25 plans an SSH
+     keepalive).
 2. **Public health report for everything4cats.ca.** A daily HTTP check from the
    VM: key pages up, broken internal links, the affiliate disclosure present,
    the Article schema intact. It never goes near the Lightsail server or the

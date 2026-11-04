@@ -19,6 +19,7 @@ case $FAKE_SSH in
   denied) echo "hermes@localhost: Permission denied (publickey,password)." >&2; exit 255 ;;
   down)   echo "ssh: connect to host localhost port 22220: Connection refused" >&2; exit 255 ;;
   127)    [[ $* == *"hermes chat"* ]] && { echo "bash: line 1: hermes: command not found" >&2; exit 127; } ;;
+  drop)   [[ $* == *"hermes chat"* ]] && { echo "Connection to localhost closed by remote host." >&2; exit 255; } ;;
   nostop) [[ $* == *"kill -TERM"* ]] && { echo "ssh: connect to host localhost port 22220: Connection refused" >&2; exit 255; } ;;
 esac
 # The VM side does not get the runner's lock fd: a real VM process never holds it.

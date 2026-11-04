@@ -312,7 +312,7 @@ Both runners share these. A scheduler retries only 13 and 14.
 | 10 | Missing input: a job file, `NEWS_CONTACT`, the profile, the SSH key, or `hermes` on the VM's `PATH` (`missing` names each) | Written |
 | 11 | Hermes's scanner refused a command. `reason` holds the line | Written |
 | 12 | A step or check failed. Read `run.log` | Written |
-| 13 | A service is down: the VM (`vm`), the router (`router`), or every news source (`network`). Retry later | Written |
+| 13 | A service is down: the VM (`vm`, including a session whose connection dropped), the router (`router`), or every news source (`network`). Retry later | Written |
 | 14 | Another job holds the lock. Nothing ran | None |
 | 143 | Stopped by SIGTERM | Written |
 | 130 | Stopped by Ctrl+C. Not retried | Written |
@@ -359,7 +359,7 @@ The tests run on the host with fakes for the VM, the router and the network:
 
 ```bash
 # Runs in: local terminal, host, in this repo. Each must end with failed=0 and exit 0.
-bash jobs/test-run-topic-scout.sh    # passed=42
+bash jobs/test-run-topic-scout.sh    # passed=44
 bash jobs/test-run-news-digest.sh    # passed=23
 bash jobs/test-add-idea.sh           # passed=37
 bash jobs/test-add-rating.sh         # passed=57

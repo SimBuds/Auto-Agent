@@ -4,9 +4,11 @@
 # Moved verbatim from run-topic-scout.sh (Phase 19, 2026-11-03).
 
 VM=hermes@localhost
-# The README's commands, plus BatchMode so a missing key fails instead of prompting.
-SSH=(ssh -p 22220 -o BatchMode=yes -o ConnectTimeout=10 "$VM")
-SCP=(scp -P 22220 -o BatchMode=yes -o ConnectTimeout=10)
+# The README's commands, plus BatchMode so a missing key fails instead of
+# prompting, and a keepalive so a VM that rebooted mid-session ends the session
+# in about a minute (on 2026-11-03 a guest reboot left one waiting 2.5 hours).
+SSH=(ssh -p 22220 -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 "$VM")
+SCP=(scp -P 22220 -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
 # Each Hermes session runs in its own process group in the VM, with the group's
 # id in ~/scout/.hermes.pgid, because sshd does not signal a command that has no
 # terminal when the client goes away, so a stopped run must stop Hermes itself.
@@ -115,7 +117,8 @@ router_up() {
 
 # session NAME TOOLSETS QUERY_FILE: one Hermes session. Sets SESSION_OUTPUT to
 # what it printed, records the first scanner refusal, and on failure exits 10
-# (hermes not found), 13 (VM or router down) or 12.
+# (hermes not found), 13 (VM or router down) or 12. Exit 255 is ssh's own: the
+# connection broke, so the VM is at fault even if it answers again by now.
 session() {
   local name=$1 start rc line
   start=$(stat -c %s "$LOG")
@@ -139,6 +142,7 @@ session() {
     MISSING+=("	hermes not found on PATH over non-interactive SSH (exit 127). Compare: ssh -p 22220 $VM 'bash -ic \"command -v hermes\"'")
     finish 10 hermes_not_on_path
   fi
+  [ $rc -eq 255 ] && finish 13 vm
   router_up
   case $? in 1) finish 13 router ;; 2) finish 13 vm ;; esac
   finish 12 failed

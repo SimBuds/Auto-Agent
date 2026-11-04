@@ -154,6 +154,24 @@ out=$(FAKE_SSH=127 run 2>&1); rc=$?
   && ! grep -q 'topic-scout-sweep.md$' <(grep '^ssh .*hermes chat' "$FAKE_CALLS") \
   && ok "hermes exits 127: exit 10 hermes_not_on_path, no sweep" || bad "hermes 127" "rc=$rc $(cat "$S" 2>&1)"
 
+# A guest that reboots mid-session drops the connection (ssh exits 255) and can
+# answer again by the time the router is probed (Phase 22, 2026-11-03).
+fresh
+out=$(FAKE_SSH=drop run 2>&1); rc=$?
+[ $rc -eq 13 ] && [ "$(stop)" = "13 vm" ] \
+  && ! grep -q 'topic-scout-sweep.md$' <(grep '^ssh .*hermes chat' "$FAKE_CALLS") \
+  && [ "$(grep -c '^ssh curl -s --max-time 10' "$FAKE_CALLS")" -eq 1 ] \
+  && ok "session ssh exits 255, VM answers again: exit 13 vm, no sweep, no second router probe" || bad "dropped session" "rc=$rc $(cat "$S" 2>&1)"
+
+# Keepalive: ssh gives up on a dead VM in about a minute instead of waiting
+# forever. ssh -G reads the options only and connects to nothing.
+VM=hermes@localhost
+eval "$(grep '^SSH=' "$R/jobs/runner-lib.sh")"
+G=$(/usr/bin/ssh -G "${SSH[@]:1}" 2>&1)
+grep -qx 'serveraliveinterval 15' <<<"$G" && grep -qx 'serveralivecountmax 4' <<<"$G" \
+  && grep -q '^SCP=.*ServerAliveInterval=15 -o ServerAliveCountMax=4' "$R/jobs/runner-lib.sh" \
+  && ok "ssh and scp keepalive: 15 seconds, 4 misses" || bad "keepalive" "$(grep -E '^serveralive' <<<"$G")"
+
 fresh
 out=$(FAKE_BLOCK=research run 2>&1); rc=$?
 [ $rc -eq 11 ] && [ "$(stop)" = "11 decision" ] && [[ $(j "$S" 'd["reason"]') == "research: "*BLOCKED* ]] \

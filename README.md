@@ -270,6 +270,7 @@ setup.
 | `skills.write_approval`               | `true`                                         | Skills Hermes writes wait in `~/.hermes/pending/skills/` until you approve them (`/skills pending`, `/skills approve`)          |
 | `auxiliary.background_review.enabled` | `false`                                        | Stops the post-run review drafting skills and memory notes on its own                                                                 |
 | `platform_toolsets.telegram`          | `[web, todo, clarify, session_search, memory]` | Telegram chats can search the web, plan, ask you questions, search past chats and keep notes. They cannot run commands or write files |
+| `platform_toolsets.cron`              | `[web]`                                        | Every cron job, including the night-tasks job, can only search and read the web. Unset, cron jobs get Hermes's default tools, terminal included |
 
 Leave the managed local runtime (`local_runtime`) off, since a second
 llama.cpp would fight the router for VRAM. Keep the terminal backend
@@ -410,6 +411,59 @@ kill -TERM -- "-$RUN"   # later, to stop it
 wait "$RUN"; echo "exit=$?"   # 143
 ```
 
+### Night tasks
+
+Queue research from Telegram during the day. One cron job in the VM runs the
+queue at 02:00 VM time and sends the results to the same chat. Up to 3 tasks
+run a night, and the rest wait for the next night. A night with nothing
+queued sends nothing and does not start the model.
+
+To queue a task, send the bot a message that starts with the save, so it
+files the task instead of doing it now:
+
+> Save this to memory as its own entry, exactly, and do not do the task now: NIGHT: find the three most-discussed llama.cpp changes this week
+
+A message that starts with the task gets the task done in the chat, with
+no entry saved (seen 2026-11-05).
+
+Each task runs once. `jobs/night-queue.py` records each one it hands to the
+job in `~/jobs/night-queue-done.txt`, so a task that runs and fails is not
+retried. Queue it again with different wording to retry it. The job can only
+search and read the web: a task that needs a command, a file, a login or a
+post comes back as "Not done". Memory holds about 2,200 characters in all,
+so after reading the results, ask the bot to delete the NIGHT entries that
+ran.
+
+Install it once. Copy the feeder and the prompt into the VM (`--script`
+only runs files from `~/.hermes/scripts/`):
+
+```bash
+# Runs in: local terminal, host, in this repo, with the VM running. Safe to run twice: scp overwrites.
+ssh -p 22220 hermes@localhost 'mkdir -p ~/.hermes/scripts ~/jobs'
+scp -P 22220 jobs/night-queue.py hermes@localhost:.hermes/scripts/night-queue.py
+scp -P 22220 jobs/night-tasks.md hermes@localhost:jobs/night-tasks.md
+```
+
+Then limit every cron job to the web tools, and create the job:
+
+```bash
+# Runs in: inside the VM. Safe to run twice: the create is skipped when the job exists.
+hermes config set platform_toolsets.cron "[web]"
+grep -n -A2 '^  cron:' ~/.hermes/config.yaml        # must list only web
+if hermes cron list | grep -q 'night-tasks'; then
+  echo "skip: the night-tasks job already exists"
+else
+  hermes cron create --name night-tasks --script night-queue.py --deliver telegram '0 2 * * *' "$(cat ~/jobs/night-tasks.md)"
+fi
+hermes cron list                                    # night-tasks, 0 2 * * *, script night-queue.py, deliver telegram
+```
+
+After changing `jobs/night-tasks.md`, copy it again and update the job with
+`hermes cron edit JOB_ID --prompt "$(cat ~/jobs/night-tasks.md)"`, using the
+ID that `hermes cron list` shows. To see what tonight's run would get,
+without marking anything done, read the queue with
+`grep -i '^night:' ~/.hermes/memories/MEMORY.md` in the VM.
+
 ### Tests
 
 The tests run on the host with fakes for the VM, the router and the network:
@@ -421,6 +475,7 @@ bash jobs/test-run-news-digest.sh    # passed=24
 bash jobs/test-add-idea.sh           # passed=37
 bash jobs/test-add-rating.sh         # passed=57
 python3 jobs/test-news-collect.py    # passed=36
+python3 jobs/test-night-queue.py     # passed=18
 ```
 
 ### Repo layout
@@ -432,6 +487,7 @@ python3 jobs/test-news-collect.py    # passed=36
 | `jobs/*.md`                                                         | Prompts Hermes receives                        |
 | `jobs/add-idea.sh`, `jobs/add-rating.sh`, `jobs/check-scout.sh` | The scripts that hold each job's rules         |
 | `jobs/news-collect.py`                                              | Fetches the news candidates on the host        |
+| `jobs/night-queue.py`                                               | Feeds queued night tasks to the VM's cron job  |
 | `jobs/test-*`, `jobs/fixtures/`                                   | Tests and their fixtures                       |
 | `out/`                                                              | Results and logs, gitignored                   |
 | `PLAN.md`, `AGENTS.md`                                            | The why, and the rules for coding agents       |

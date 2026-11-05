@@ -271,6 +271,21 @@ hand runs.
   VM. The runners still drive Hermes the way a hand-run does (copy in, run
   over SSH on port 22220, copy out), and never start or stop the VM, take
   snapshots, or change Hermes's config.
+- **Night tasks are queued through memory, and one fixed job runs them**
+  (Casey, 2026-11-05, option A of three). Casey asks in Telegram, Hermes
+  saves an entry starting `NIGHT:` with its `memory` tool, and the
+  `night-tasks` cron job (02:00 VM time) gets up to 3 unrun entries from
+  `jobs/night-queue.py`. Reason: Telegram must not get the `cronjob` tool,
+  because a job's own `enabled_toolsets` beats `platform_toolsets.cron`
+  and the model-facing tool forwards it, so qwen (or a web page it read)
+  could create a job with `terminal`. Rejected: `/cron add` from Telegram
+  (`/cron` is CLI-only) and queueing over SSH (not from the phone). Casey
+  creates the one job over SSH, and `platform_toolsets.cron: [web]` holds
+  every cron job to the web tools, because `hermes cron create` has no
+  toolset flag. The job has no file tool, so a page cannot get it to read
+  `~/.hermes/.env` and leak the token through a fetched URL. A page read
+  in a Telegram chat could still plant a `NIGHT:` entry. Its worst case is
+  a web-only run whose result goes to Casey, so that risk is accepted.
 - **Hermes never calls the hub,** holds no hub token, and never sees Jobhunt
   or SEO-LLM data. Every output still ends in a file Casey reviews.
 - **The runners need an SSH key for `hermes@localhost`,** because they never
@@ -430,6 +445,9 @@ first change, Phase 33):
 | `~/.hermes/config.yaml` | The Telegram toolsets and `telegram:` keys | Kept | Rolled back | Lost. The README's Telegram block re-applies them |
 | `~/.config/systemd/user/` | The gateway's service unit | Kept | Rolled back | Lost. `hermes gateway install` again |
 | `/var/lib/systemd/linger/hermes` | Starting the user service at boot with no login | Kept | Rolled back | Lost. `sudo loginctl enable-linger hermes` again |
+| `~/.hermes/scripts/night-queue.py`, `~/jobs/night-tasks.md` | The night-task feeder and prompt (Phase 34) | Kept | Rolled back | Lost. The README's *Night tasks* block copies them from `jobs/` |
+| `~/.hermes/cron/jobs.json` | The `night-tasks` job | Kept | Rolled back | Lost. The README's *Night tasks* block creates it again |
+| `~/.hermes/memories/MEMORY.md`, `~/jobs/night-queue-done.txt` | The queue, and the hashes of tasks already run | Kept | Rolled back, so tasks run since the snapshot could run again | Lost, by design: no copy in the repo |
 
 The token and the user ID have no copy in this repo by design (a secret,
 and an account identifier). Everything else has its durable copy in the
@@ -535,6 +553,22 @@ router serves Hermes*.
 - Hermes's security audit found SSH password login on, and quickemu
   forwards 22220 on all host interfaces (`0.0.0.0`). Password login is off
   since 2026-11-04 (`/etc/ssh/sshd_config.d/10-no-password.conf`).
+
+**Night tasks** (Phase 34, 2026-11-05, read from v0.22.7's source and help)
+- Memory entries are split by `"\n§\n"` (`ENTRY_DELIMITER`,
+  `tools/memory_tool_store.py`), and `MEMORY.md` holds
+  `memory_char_limit` characters, 2200 by default. Hermes rewords what it
+  saves ("today's" was saved as "todays"), so the feeder matches only a
+  leading `NIGHT:`, in any case, and never the wording.
+- A cron `--script` runs only from `~/.hermes/scripts/`, `.sh` under bash
+  and anything else under Hermes's Python. Its stdout goes into the
+  prompt, and an empty stdout skips the model call
+  (`cron/scheduler.py`: "script produced no output, skipping AI call").
+- `hermes cron create` and `edit` have no toolset flag, and
+  `platform_toolsets.cron` was unset, so cron jobs had Hermes's default
+  tools until Casey set `[web]`.
+- The feeder records a task as done before printing it, so a task runs at
+  most once, even when the run fails.
 
 **Topic scout checks**
 - The field check catches "Best ..." titles typed anything but `roundup`:

@@ -274,7 +274,7 @@ hand runs.
 - **Night tasks are queued through memory, and one fixed job runs them**
   (Casey, 2026-11-05, option A of three). Casey asks in Telegram, Hermes
   saves an entry starting `NIGHT:` with its `memory` tool, and the
-  `night-tasks` cron job (02:00 VM time) gets up to 3 unrun entries from
+  `night-tasks` cron job (03:00 VM time) gets up to 3 unrun entries from
   `jobs/night-queue.py`. Reason: Telegram must not get the `cronjob` tool,
   because a job's own `enabled_toolsets` beats `platform_toolsets.cron`
   and the model-facing tool forwards it, so qwen (or a web page it read)
@@ -569,6 +569,35 @@ router serves Hermes*.
   tools until Casey set `[web]`.
 - The feeder records a task as done before printing it, so a task runs at
   most once, even when the run fails.
+- Time (Phase 35): the VM is `America/New_York`, the same zone as the
+  host, and no profile `timezone:` is set. The job runs at 03:00, moved
+  from 02:00 on 2026-11-05 (Casey), because 02:00 does not exist on the
+  March daylight-saving night. A missed run follows, in order: the job's
+  own `catch_up`, then skip past an explicit `grace_minutes`, then
+  `cron.catch_up_missed` (`cron/missed_runs.py`). A test set
+  `grace_minutes`, which `cron edit` cannot clear, and a run missed past
+  it was skipped despite `catch_up_missed: true`. So the job carries
+  `--catch-up on`: a run missed while the VM was off runs once when it
+  starts again.
+  `HERMES_CRON_TIMEOUT` is unset: 600 s of inactivity, not total time.
+  Untested: whether that limit trips, and fails loudly, when the router's
+  one slot is busy with a long hand run (deferred 2026-11-05, Casey).
+- Failure (Phase 35): a feeder that exits 1 does not stop the run.
+  Hermes injects a `## Script Error` section ("Report this to the user")
+  and runs the model anyway. Before the fix the model ignored it, the run
+  was booked `completed`, and nothing failed loudly. `cron edit --script`
+  does refuse a missing file. The prompt now opens with a "First" section:
+  on a Script Error, reply `[CRON_FAILURE]` and do no tasks. Retested:
+  the run was booked `failed` and Telegram got "Cron 'night-tasks'
+  failed" with the error.
+- Memory (Phase 35): cron runs always load `MEMORY.md`
+  (`cron/scheduler.py`, `skip_memory=False`), and `memory.memory_enabled`
+  is global, so the queue cannot be hidden from the night model. With no
+  task list, the model did all 5 `NIGHT:` entries again, done ones
+  included. So "each task runs once" rests on the feeder's list plus the
+  prompt rule never to do memory `NIGHT:` entries. Retested with 5 old
+  entries and 1 new: only the new one ran. Pruning done entries from
+  memory is deferred.
 
 **Topic scout checks**
 - The field check catches "Best ..." titles typed anything but `roundup`:

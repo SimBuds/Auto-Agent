@@ -414,7 +414,7 @@ wait "$RUN"; echo "exit=$?"   # 143
 ### Night tasks
 
 Queue research from Telegram during the day. One cron job in the VM runs the
-queue at 02:00 VM time and sends the results to the same chat. Up to 3 tasks
+queue at 03:00 VM time and sends the results to the same chat. Up to 3 tasks
 run a night, and the rest wait for the next night. A night with nothing
 queued sends nothing and does not start the model.
 
@@ -433,6 +433,19 @@ search and read the web: a task that needs a command, a file, a login or a
 post comes back as "Not done". Memory holds about 2,200 characters in all,
 so after reading the results, ask the bot to delete the NIGHT entries that
 ran.
+
+What a night can look like in Telegram:
+
+- **Results:** one message with each task, its answer and its sources.
+- **Nothing:** no tasks were queued, so the model never started.
+- **"Cron 'night-tasks' failed: Night tasks did not run":** the feeder
+  could not read the queue. The error follows. Fix it, then run the job by
+  hand with `hermes cron run JOB_ID`.
+- **Late results:** the VM was off at 03:00. The job runs once when the VM
+  starts again (`catch_up: true` on the job).
+
+`hermes cron runs JOB_ID` lists every run, and each run's full prompt and
+reply is in `~/.hermes/cron/output/JOB_ID/` in the VM.
 
 Install it once. Copy the feeder and the prompt into the VM (`--script`
 only runs files from `~/.hermes/scripts/`):
@@ -453,9 +466,9 @@ grep -n -A2 '^  cron:' ~/.hermes/config.yaml        # must list only web
 if hermes cron list | grep -q 'night-tasks'; then
   echo "skip: the night-tasks job already exists"
 else
-  hermes cron create --name night-tasks --script night-queue.py --deliver telegram '0 2 * * *' "$(cat ~/jobs/night-tasks.md)"
+  hermes cron create --name night-tasks --script night-queue.py --deliver telegram --catch-up on '0 3 * * *' "$(cat ~/jobs/night-tasks.md)"
 fi
-hermes cron list                                    # night-tasks, 0 2 * * *, script night-queue.py, deliver telegram
+hermes cron list                                    # night-tasks, 0 3 * * *, script night-queue.py, deliver telegram
 ```
 
 After changing `jobs/night-tasks.md`, copy it again and update the job with

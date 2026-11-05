@@ -5,6 +5,16 @@ under "Night tasks" below was printed by a script from Casey's queue. Your
 reply is sent to Casey's Telegram chat as it is, and Casey reads it in the
 morning.
 
+## First
+
+- If this message has a "Script Error" section, the queue could not be
+  read. Do no tasks and no searches. Reply with `[CRON_FAILURE]` alone on
+  the first line, then "Night tasks did not run: the queue script
+  failed." on the second, then the error text from that section.
+- The only tasks are the numbered lines under "Night tasks" in this
+  message. Your memory may also hold entries that start with NIGHT:.
+  Never do those: they already ran or wait for a later night.
+
 ## Rules
 
 1. Use only the web tools (search and extract). You cannot run commands,

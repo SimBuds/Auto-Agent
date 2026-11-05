@@ -260,16 +260,16 @@ setup.
 
 ### Hermes config
 
-| Key                                     | Value                       | Why                                                                                                                          |
-| --------------------------------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `model.provider`                      | `custom`                  | Any OpenAI-compatible server                                                                                                 |
-| `model.base_url`                      | `http://10.0.2.2:8080/v1` | The host's router, through QEMU's address for the host                                                                       |
-| `model.default`                       | `qwen`                    | One pinned model                                                                                                             |
-| `model.api_key`                       | `local`                   | A placeholder: the router has no auth                                                                                        |
-| `model.context_length`                | `131072`                  | The router's context, stated rather than guessed                                                                             |
-| `skills.write_approval`               | `true`                    | Skills Hermes writes wait in `~/.hermes/pending/skills/` until you approve them (`/skills pending`, `/skills approve`) |
-| `auxiliary.background_review.enabled` | `false`                   | Stops the post-run review drafting skills and memory notes on its own                                                        |
-| `platform_toolsets.telegram` | `[web, todo, clarify, session_search, memory]` | Telegram chats can search the web, plan, ask you questions, search past chats and keep notes. They cannot run commands or write files |
+| Key                                     | Value                                            | Why                                                                                                                                   |
+| --------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `model.provider`                      | `custom`                                       | Any OpenAI-compatible server                                                                                                          |
+| `model.base_url`                      | `http://10.0.2.2:8080/v1`                      | The host's router, through QEMU's address for the host                                                                                |
+| `model.default`                       | `qwen`                                         | One pinned model                                                                                                                      |
+| `model.api_key`                       | `local`                                        | A placeholder: the router has no auth                                                                                                 |
+| `model.context_length`                | `131072`                                       | The router's context, stated rather than guessed                                                                                      |
+| `skills.write_approval`               | `true`                                         | Skills Hermes writes wait in `~/.hermes/pending/skills/` until you approve them (`/skills pending`, `/skills approve`)          |
+| `auxiliary.background_review.enabled` | `false`                                        | Stops the post-run review drafting skills and memory notes on its own                                                                 |
+| `platform_toolsets.telegram`          | `[web, todo, clarify, session_search, memory]` | Telegram chats can search the web, plan, ask you questions, search past chats and keep notes. They cannot run commands or write files |
 
 Leave the managed local runtime (`local_runtime`) off, since a second
 llama.cpp would fight the router for VRAM. Keep the terminal backend

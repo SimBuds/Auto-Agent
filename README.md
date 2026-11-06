@@ -533,9 +533,10 @@ Each task runs once. `jobs/night-queue.py` records each one it hands to the
 job in `~/jobs/night-queue-done.txt`, so a task that runs and fails is not
 retried. Queue it again with different wording to retry it. The job can only
 search and read the web: a task that needs a command, a file, a login or a
-post comes back as "Not done". Memory holds about 2,200 characters in all,
-so after reading the results, ask the bot to delete the NIGHT entries that
-ran.
+post comes back as "Not done". The feeder also deletes each NIGHT entry
+from memory once it has handed it over, so memory (about 2,200 characters in
+all) does not fill with old tasks. It never touches other entries. If Hermes
+reworded an entry after it ran, the new wording counts as a new task.
 
 What a night can look like in Telegram:
 
@@ -591,7 +592,7 @@ bash jobs/test-run-news-digest.sh    # passed=24
 bash jobs/test-add-idea.sh           # passed=37
 bash jobs/test-add-rating.sh         # passed=57
 python3 jobs/test-news-collect.py    # passed=36
-python3 jobs/test-night-queue.py     # passed=18
+python3 jobs/test-night-queue.py     # passed=29
 ```
 
 ### Repo layout

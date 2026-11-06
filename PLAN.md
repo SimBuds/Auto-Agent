@@ -624,8 +624,16 @@ router serves Hermes*.
   task list, the model did all 5 `NIGHT:` entries again, done ones
   included. So "each task runs once" rests on the feeder's list plus the
   prompt rule never to do memory `NIGHT:` entries. Retested with 5 old
-  entries and 1 new: only the new one ran. Pruning done entries from
-  memory is deferred.
+  entries and 1 new: only the new one ran.
+- Pruning (Phase 39, 2026-11-06): the feeder removes every `NIGHT:` entry
+  whose hash is in the done list from `MEMORY.md`, tonight's included, so
+  old tasks stop filling the 2,200-character store. It holds Hermes's own
+  lock for the whole run (exclusive `flock` on `MEMORY.md.lock`, opened as
+  Hermes opens it) and writes as Hermes does (`§`-joined entries, temp file
+  and rename, mode 0600). Hermes re-reads the file under that lock before
+  each change, so neither side drops the other's entries. A busy lock for
+  10 seconds fails the run with nothing recorded. With nothing to remove,
+  the file is not rewritten.
 - First real night (2026-11-06): the host was off at 03:00 and booted at
   05:03, the VM started at 05:08:27, and the job caught up at 05:08:55
   with the queued task's result in Telegram. A run firing on time at

@@ -220,6 +220,89 @@ replies steer the next ones. Messages sent while the VM is off or
 rebooting are dropped, not queued. `/skills pending` lists skills waiting
 for approval.
 
+#### Topics
+
+The bot chat is split into three topics, General, Research and Night, each
+with its own history. Memory and skills stay shared, so a night task queued
+in any topic is picked up. Night results post in Night. With Threaded Mode
+on there is no plain chat: a message sent in **All Messages** makes Telegram
+open a new topic, which Hermes treats as a new session (seen 2026-11-06). So
+write in General, Research or Night. Do not send `/topic`: it makes the
+main chat a commands-only lobby.
+
+1. On the phone, open BotFather's Mini App (search `botfather`, tap
+   **Open** on the verified result. The `/mybots` text menu does not have
+   this). Then **My bots**, the bot, **Bot Settings**, **Threads
+   Settings**, and turn on **Threaded Mode**.
+2. Back up the config and declare the topics. Telegram is configured from
+   `.env`, so this adds a new `platforms:` section and edits nothing else:
+
+```bash
+# Runs in: inside the VM. Safe to run twice: it skips when dm_topics or a platforms: section already exists.
+CFG=~/.hermes/config.yaml
+BAK=~/.hermes/config.yaml.before-topics
+if grep -q 'dm_topics' "$CFG"; then
+  echo "skip: dm_topics already in config.yaml"
+elif grep -q '^platforms:' "$CFG"; then
+  echo "STOP: config.yaml already has a platforms: section. Nothing changed."
+else
+  TG_ID=$(sed -n 's/^TELEGRAM_ALLOWED_USERS=//p' ~/.hermes/.env | tr -d "\"' ")
+  case "$TG_ID" in
+    ''|*[!0-9]*) echo "STOP: TELEGRAM_ALLOWED_USERS is not one numeric ID. Nothing changed." ;;
+    *)
+      echo "user ID found: ${#TG_ID} digits"
+      if [ -e "$BAK" ]; then echo "skip: backup already exists"; else cp "$CFG" "$BAK" && echo "backup made: $BAK"; fi
+      printf '%s\n' '' 'platforms:' '  telegram:' '    extra:' '      dm_topics:' \
+        "      - chat_id: $TG_ID" '        topics:' '        - name: General' \
+        '        - name: Research' '        - name: Night' >> "$CFG"
+      echo "added dm_topics:"
+      tail -n 9 "$CFG" | sed -E 's/chat_id: [0-9]+/chat_id: <your ID>/'
+      ;;
+  esac
+fi
+```
+
+3. Restart the gateway. It creates the topics and writes their IDs back
+   into `config.yaml`:
+
+```bash
+# Runs in: inside the VM. Telegram is down for about 30 s.
+systemctl --user restart hermes-gateway.service
+sleep 45
+systemctl --user is-active hermes-gateway.service    # must print active
+grep -E "Setting up [0-9]+ DM topic|Created DM topic|Persisted thread_id|not a forum|forums_disabled" ~/.hermes/logs/gateway.log | tail -n 8
+```
+
+The log must show three `Persisted thread_id` lines. `not a forum` means
+Threaded Mode is still off. Turn it on and repeat this step.
+
+4. Send cron results to Night:
+
+```bash
+# Runs in: inside the VM. Safe to run twice: it skips when the key is already set.
+ENVF=~/.hermes/.env
+LOG=~/.hermes/logs/gateway.log
+if grep -q '^TELEGRAM_CRON_THREAD_ID=' "$ENVF"; then
+  echo "skip: TELEGRAM_CRON_THREAD_ID already set"
+else
+  TID=$(sed -n "s/.*Persisted thread_id=\([0-9]*\) for topic 'Night'.*/\1/p" "$LOG" | tail -n 1)
+  echo "Night thread_id: ${TID:-none}"
+  case "$TID" in
+    ''|*[!0-9]*) echo "STOP: no Night topic ID in the gateway log. Nothing changed." ;;
+    *)
+      printf 'TELEGRAM_CRON_THREAD_ID=%s\n' "$TID" >> "$ENVF"
+      echo "added TELEGRAM_CRON_THREAD_ID=$TID"
+      systemctl --user restart hermes-gateway.service
+      sleep 45
+      systemctl --user is-active hermes-gateway.service
+      ;;
+  esac
+fi
+```
+
+To undo, restore `~/.hermes/config.yaml.before-topics`, delete the
+`TELEGRAM_CRON_THREAD_ID=` line from `.env`, and restart the gateway.
+
 ## How to tailor
 
 ### VM settings
@@ -406,15 +489,35 @@ ssh client leaves Hermes running in the VM.
 
 ```bash
 # Runs in: local terminal, host, in this repo.
-setsid bash jobs/run-topic-scout.sh & RUN=$!
-kill -TERM -- "-$RUN"   # later, to stop it
-wait "$RUN"; echo "exit=$?"   # 143
+setsid bash jobs/run-topic-scout.sh &
 ```
+
+To stop it later, find the runner by its command line. `$!` does not work
+here: in an interactive shell `setsid` forks, so `$!` is a process that has
+already exited.
+
+```bash
+# Runs in: local terminal, host. Safe to run twice: with no run going it stops nothing.
+JOB=run-topic-scout.sh   # EDIT: or run-news-digest.sh
+PIDS=$(pgrep -f "^bash jobs/$JOB")
+echo "runner PIDs found: ${PIDS:-none}"
+if [ -z "$PIDS" ]; then
+  echo "STOP: no $JOB run is going. Nothing was stopped."
+elif [ "$(printf '%s\n' "$PIDS" | wc -l)" -ne 1 ]; then
+  echo "STOP: more than one match. Nothing was stopped."
+else
+  kill -TERM -- "-$PIDS" && echo "sent TERM to process group $PIDS"
+fi
+```
+
+It must print one PID and `sent TERM`. The run's `out/scout/status.json`
+(or `out/news/`) then shows `"exit_code": 143`.
 
 ### Night tasks
 
 Queue research from Telegram during the day. One cron job in the VM runs the
-queue at 03:00 VM time and sends the results to the same chat. Up to 3 tasks
+queue at 03:00 VM time and sends the results to the Night topic (see
+*Topics*). Up to 3 tasks
 run a night, and the rest wait for the next night. A night with nothing
 queued sends nothing and does not start the model.
 

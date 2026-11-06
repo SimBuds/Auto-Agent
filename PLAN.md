@@ -451,6 +451,7 @@ first change, Phase 33):
 |---|---|---|---|---|
 | `~/.hermes/.env` | The bot token and the allowed user ID | Kept | Rolled back to the snapshot | Lost. Casey runs `hermes gateway setup` again |
 | `~/.hermes/config.yaml` | The Telegram toolsets and `telegram:` keys | Kept | Rolled back | Lost. The README's Telegram block re-applies them |
+| `~/.hermes/config.yaml` `platforms.telegram.extra.dm_topics`, and `TELEGRAM_CRON_THREAD_ID` in `~/.hermes/.env` | The three topics with their thread IDs, and the topic night results post to (Phase 38) | Kept | Rolled back | Lost. The README's *Topics* block re-adds them, and Telegram makes new topics |
 | `~/.config/systemd/user/` | The gateway's service unit | Kept | Rolled back | Lost. `hermes gateway install` again |
 | `/var/lib/systemd/linger/hermes` | Starting the user service at boot with no login | Kept | Rolled back | Lost. `sudo loginctl enable-linger hermes` again |
 | `~/.hermes/scripts/night-queue.py`, `~/jobs/night-tasks.md` | The night-task feeder and prompt (Phase 34) | Kept | Rolled back | Lost. The README's *Night tasks* block copies them from `jobs/` |
@@ -558,6 +559,25 @@ router serves Hermes*.
   loginctl enable-linger hermes` does it. Telegram messages sent while the
   gateway is down are dropped on its cold boot
   (`drop_pending_on_cold_boot`), not queued.
+- The service restarts itself after a crash (Phase 37, 2026-11-06). The
+  unit `hermes gateway install` writes has `Restart=always`,
+  `RestartSec=5` and `StartLimitIntervalSec=0`, so systemd retries without
+  limit. Exit 78 (a config error) is not retried, and a
+  `systemctl --user stop` stays stopped. A `kill -9` of the main PID was
+  replaced by a new one within 15 seconds (`NRestarts=1`, `active`). So no
+  watchdog and no drop-in are needed.
+- Topics (Phase 38, 2026-11-06, v0.22.7). Declared topics in
+  `platforms.telegram.extra.dm_topics` are created at gateway start (BotFather
+  Threaded Mode on), and their thread IDs are written back to `config.yaml`
+  (`Persisted thread_id=N`). A top-level `platforms.telegram` block is merged
+  with the `.env` setup, its `extra` deep-merged (`gateway/config_loader.py`),
+  so it adds to that setup and replaces nothing. `TELEGRAM_CRON_THREAD_ID`
+  sends cron deliveries to one topic (`cron/scheduler_delivery.py`): a test
+  run with a task queued from Research posted in Night (`thread=263` in
+  `agent.log`). With Threaded Mode on, a message in Telegram's All Messages
+  view opens a new topic, and so a new Hermes session (Casey, 2026-11-06),
+  so there is no plain chat left. The `/topic` command would also make the
+  main chat a commands-only lobby, so it is left off.
 - Hermes's security audit found SSH password login on, and quickemu
   forwards 22220 on all host interfaces (`0.0.0.0`). Password login is off
   since 2026-11-04 (`/etc/ssh/sshd_config.d/10-no-password.conf`).

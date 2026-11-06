@@ -146,7 +146,15 @@ approves every stage by hand.
    request every three seconds, and its metadata is CC0). Out: Reddit (its
    Data API needs a registered app) and Lobsters (its robots.txt disallows
    all clients and declares `ai-input=no`, which rating by a model is). A
-   further source is added only after the same check. The collector,
+   further source is added only after the same check. Reddit, rechecked
+   2026-11-05: its `robots.txt` is `User-agent: *` `Disallow: /`, so its
+   anonymous feeds suit only a single fetch Casey asks for, never a
+   scheduled job. Hermes's official `reddit-reading` skill is installed in
+   the VM and was reviewed: read-only, Reddit hosts only, no file writes,
+   and it switches to the OAuth API when `REDDIT_CLIENT_ID` and
+   `REDDIT_CLIENT_SECRET` are set. It runs through `terminal`, so it works
+   from the CLI in the VM, not from Telegram or the night job. Reddit
+   becomes a night-task source only after Casey registers an OAuth app. The collector,
    `jobs/news-collect.py`, runs on the host and writes a dated candidates
    file per run, which is also the history trends will be counted from.
 
@@ -598,6 +606,10 @@ router serves Hermes*.
   prompt rule never to do memory `NIGHT:` entries. Retested with 5 old
   entries and 1 new: only the new one ran. Pruning done entries from
   memory is deferred.
+- First real night (2026-11-06): the host was off at 03:00 and booted at
+  05:03, the VM started at 05:08:27, and the job caught up at 05:08:55
+  with the queued task's result in Telegram. A run firing on time at
+  03:00 with the VM already up has not been seen yet.
 
 **Topic scout checks**
 - The field check catches "Best ..." titles typed anything but `roundup`:

@@ -3,13 +3,13 @@
 [Hermes Agent](https://github.com/NousResearch/hermes-agent) running in a
 QEMU virtual machine, using models served by a llama.cpp router on the host.
 The VM is the sandbox: Hermes runs its tools freely inside it, and a snapshot
-undoes whatever it did. Two jobs are included, a topic scout for a content
-site and a daily news digest, each run by one host command.
+undoes whatever it did. One job is included, a topic scout for a content
+site, run by one host command.
 
 ```text
 Host                                     VM (Debian, quickemu)
   llama.cpp router 127.0.0.1:8080  <----   Hermes Agent, base_url http://10.0.2.2:8080/v1
-  jobs/run-*.sh  ---- ssh -p 22220 ---->   ~/jobs, ~/scout, ~/news
+  jobs/run-*.sh  ---- ssh -p 22220 ---->   ~/jobs, ~/scout
 ```
 
 **You need:** a Linux host with [quickemu](https://github.com/quickemu-project/quickemu),
@@ -223,8 +223,8 @@ for approval.
 #### Topics
 
 The bot chat is split into three topics, General, Research and Night, each
-with its own history. Memory and skills stay shared, so a night task queued
-in any topic is picked up. Night results post in Night. With Threaded Mode
+with its own history. Memory and skills stay shared across topics. Cron
+job results post in Night. With Threaded Mode
 on there is no plain chat: a message sent in **All Messages** makes Telegram
 open a new topic, which Hermes treats as a new session (seen 2026-11-06). So
 write in General, Research or Night. Do not send `/topic`: it makes the
@@ -343,17 +343,17 @@ setup.
 
 ### Hermes config
 
-| Key                                     | Value                                            | Why                                                                                                                                   |
-| --------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `model.provider`                      | `custom`                                       | Any OpenAI-compatible server                                                                                                          |
-| `model.base_url`                      | `http://10.0.2.2:8080/v1`                      | The host's router, through QEMU's address for the host                                                                                |
-| `model.default`                       | `qwen`                                         | One pinned model                                                                                                                      |
-| `model.api_key`                       | `local`                                        | A placeholder: the router has no auth                                                                                                 |
-| `model.context_length`                | `131072`                                       | The router's context, stated rather than guessed                                                                                      |
-| `skills.write_approval`               | `true`                                         | Skills Hermes writes wait in `~/.hermes/pending/skills/` until you approve them (`/skills pending`, `/skills approve`)          |
-| `auxiliary.background_review.enabled` | `false`                                        | Stops the post-run review drafting skills and memory notes on its own                                                                 |
-| `platform_toolsets.telegram`          | `[web, todo, clarify, session_search, memory]` | Telegram chats can search the web, plan, ask you questions, search past chats and keep notes. They cannot run commands or write files |
-| `platform_toolsets.cron`              | `[web]`                                        | Every cron job, including the night-tasks job, can only search and read the web. Unset, cron jobs get Hermes's default tools, terminal included |
+| Key                                     | Value                                            | Why                                                                                                                                             |
+| --------------------------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `model.provider`                      | `custom`                                       | Any OpenAI-compatible server                                                                                                                    |
+| `model.base_url`                      | `http://10.0.2.2:8080/v1`                      | The host's router, through QEMU's address for the host                                                                                          |
+| `model.default`                       | `qwen`                                         | One pinned model                                                                                                                                |
+| `model.api_key`                       | `local`                                        | A placeholder: the router has no auth                                                                                                           |
+| `model.context_length`                | `131072`                                       | The router's context, stated rather than guessed                                                                                                |
+| `skills.write_approval`               | `true`                                         | Skills Hermes writes wait in `~/.hermes/pending/skills/` until you approve them (`/skills pending`, `/skills approve`)                    |
+| `auxiliary.background_review.enabled` | `false`                                        | Stops the post-run review drafting skills and memory notes on its own                                                                           |
+| `platform_toolsets.telegram`          | `[web, todo, clarify, session_search, memory]` | Telegram chats can search the web, plan, ask you questions, search past chats and keep notes. They cannot run commands or write files           |
+| `platform_toolsets.cron`              | `[web]`                                        | Every cron job can only search and read the web. Unset, cron jobs get Hermes's default tools, terminal included |
 
 Leave the managed local runtime (`local_runtime`) off, since a second
 llama.cpp would fight the router for VRAM. Keep the terminal backend
@@ -375,21 +375,6 @@ SEO pipeline):
   `jobs/check-scout.sh` checks the pulled file. They share their word rules,
   so change both together.
 
-**News digest** (Hacker News, Hugging Face trending models and new arXiv
-papers, rated against your interests):
-
-- The profile is a markdown file of your interests, read from
-  `~/Apps/Portfolio/CASEY-INTERESTS.md` or from `NEWS_PROFILE`. It never goes
-  into this repo. Its `## Tuning notes` section, if any, stays on the host.
-- `NEWS_CONTACT` is the contact address in the collector's User-Agent. It is
-  read at run time and never stored.
-- Collector limits, each an environment override: `NEWS_HN_HOURS` (24),
-  `NEWS_HN_MIN_POINTS` (50), `NEWS_HN_LIMIT` (40), `NEWS_HF_LIMIT` (15),
-  `NEWS_ARXIV_LIMIT` (20), `NEWS_ARXIV_CATS` (`cs.AI cs.CL cs.LG cs.SE`),
-  `NEWS_CACHE_TTL` (3600 seconds).
-- `jobs/news-rate.md` is the rating prompt. `jobs/add-rating.sh` is the only
-  way a rating is recorded, and its header lists the scoring rules.
-
 ## How to use
 
 ### Run a job
@@ -402,14 +387,7 @@ bash jobs/run-topic-scout.sh
 echo "exit=$?"
 ```
 
-```bash
-# Runs in: local terminal, host, in this repo, with the VM running.
-NEWS_CONTACT='you@example.com'   # EDIT: your contact address, for the User-Agent
-NEWS_CONTACT="$NEWS_CONTACT" bash jobs/run-news-digest.sh
-echo "exit=$?"
-```
-
-Each runner copies its files into the VM, runs the Hermes sessions, pulls the
+The runner copies its files into the VM, runs the Hermes sessions, pulls the
 result back and checks it. It never starts or stops the VM or changes
 Hermes's config. One lock (`out/.hermes-run.lock`) lets only one job run at
 a time.
@@ -417,9 +395,8 @@ a time.
 | Job         | Writes to `out/`                                                                                                  |
 | ----------- | ------------------------------------------------------------------------------------------------------------------- |
 | Topic scout | `scout/topic-scout-DATE-HHMMSSZ.md`, `scout/status.json`, `scout/run.log`                                     |
-| News digest | `news/digest-DAY.md`, `news/ratings-DAY.txt`, `news/candidates-DAY.*`, `news/status.json`, `news/run.log` |
 
-Follow a run with `tail -f out/scout/run.log` (or `out/news/`). Do not start
+Follow a run with `tail -f out/scout/run.log`. Do not start
 a scout run between 23:00 and 01:00 VM time: a date change between its two
 sessions fails the run.
 
@@ -437,21 +414,17 @@ F=out/scout/topic-scout-2026-01-01-000000Z.md   # EDIT: the file you reviewed
 tail -n 12 jobs/topic-scout-seen.txt
 ```
 
-**News digest.** Read `digest-DAY.md`, highest interest first. Where a
-rating feels wrong, add a dated line to the profile's *Tuning notes* and
-adjust the profile's wording.
-
 ### Exit codes
 
-Both runners share these. A scheduler retries only 13 and 14.
+The runner uses these. A scheduler retries only 13 and 14.
 
 | Exit | Meaning                                                                                                                                                                                         | `status.json` |
 | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- |
 | 0    | Done and checked. Review any `warn` in `checks`                                                                                                                                             | Written         |
-| 10   | Missing input or a setup fault: a job file, `NEWS_CONTACT`, the profile, the SSH key, `hermes` on the VM's `PATH`, or Hermes's context not matching the router's (`missing` names each) | Written         |
+| 10   | Missing input or a setup fault: a job file, the SSH key, `hermes` on the VM's `PATH`, or Hermes's context not matching the router's (`missing` names each) | Written         |
 | 11   | Hermes's scanner refused a command. `reason` holds the line                                                                                                                                   | Written         |
 | 12   | A step or check failed. Read `run.log`                                                                                                                                                        | Written         |
-| 13   | A service is down: the VM (`vm`, including a session whose connection dropped), the router (`router`), or every news source (`network`). Retry later                                      | Written         |
+| 13   | A service is down: the VM (`vm`, including a session whose connection dropped), or the router (`router`). Retry later                                      | Written         |
 | 14   | Another job holds the lock. Nothing ran                                                                                                                                                         | None            |
 | 143  | Stopped by SIGTERM                                                                                                                                                                              | Written         |
 | 130  | Stopped by Ctrl+C. Not retried                                                                                                                                                                  | Written         |
@@ -474,12 +447,11 @@ Both runners share these. A scheduler retries only 13 and 14.
 ```
 
 `stop_reason` is `input` or `hermes_not_on_path` (10), `decision` (11),
-`failed` (12), `vm`, `router` or `network` (13), `terminated` (143),
+`failed` (12), `vm` or `router` (13), `terminated` (143),
 `interrupted` (130), or `null`. The scout's `checks` are `skills`, `fields`,
 `urls` and `count` (plus `sweep` when research wrote no file). `count` warns
 when a file has fewer than 10 ideas and nothing in the left-out list, which
-can mean the session stopped early. The digest's are
-`collect`, `digest` and `profile`.
+can mean the session stopped early.
 
 ### Stop a run
 
@@ -498,7 +470,7 @@ already exited.
 
 ```bash
 # Runs in: local terminal, host. Safe to run twice: with no run going it stops nothing.
-JOB=run-topic-scout.sh   # EDIT: or run-news-digest.sh
+JOB=run-topic-scout.sh
 PIDS=$(pgrep -f "^bash jobs/$JOB")
 echo "runner PIDs found: ${PIDS:-none}"
 if [ -z "$PIDS" ]; then
@@ -511,75 +483,7 @@ fi
 ```
 
 It must print one PID and `sent TERM`. The run's `out/scout/status.json`
-(or `out/news/`) then shows `"exit_code": 143`.
-
-### Night tasks
-
-Queue research from Telegram during the day. One cron job in the VM runs the
-queue at 03:00 VM time and sends the results to the Night topic (see
-*Topics*). Up to 3 tasks
-run a night, and the rest wait for the next night. A night with nothing
-queued sends nothing and does not start the model.
-
-To queue a task, send the bot a message that starts with the save, so it
-files the task instead of doing it now:
-
-> Save this to memory as its own entry, exactly, and do not do the task now: NIGHT: find the three most-discussed llama.cpp changes this week
-
-A message that starts with the task gets the task done in the chat, with
-no entry saved (seen 2026-11-05).
-
-Each task runs once. `jobs/night-queue.py` records each one it hands to the
-job in `~/jobs/night-queue-done.txt`, so a task that runs and fails is not
-retried. Queue it again with different wording to retry it. The job can only
-search and read the web: a task that needs a command, a file, a login or a
-post comes back as "Not done". The feeder also deletes each NIGHT entry
-from memory once it has handed it over, so memory (about 2,200 characters in
-all) does not fill with old tasks. It never touches other entries. If Hermes
-reworded an entry after it ran, the new wording counts as a new task.
-
-What a night can look like in Telegram:
-
-- **Results:** one message with each task, its answer and its sources.
-- **Nothing:** no tasks were queued, so the model never started.
-- **"Cron 'night-tasks' failed: Night tasks did not run":** the feeder
-  could not read the queue. The error follows. Fix it, then run the job by
-  hand with `hermes cron run JOB_ID`.
-- **Late results:** the VM was off at 03:00. The job runs once when the VM
-  starts again (`catch_up: true` on the job).
-
-`hermes cron runs JOB_ID` lists every run, and each run's full prompt and
-reply is in `~/.hermes/cron/output/JOB_ID/` in the VM.
-
-Install it once. Copy the feeder and the prompt into the VM (`--script`
-only runs files from `~/.hermes/scripts/`):
-
-```bash
-# Runs in: local terminal, host, in this repo, with the VM running. Safe to run twice: scp overwrites.
-ssh -p 22220 hermes@localhost 'mkdir -p ~/.hermes/scripts ~/jobs'
-scp -P 22220 jobs/night-queue.py hermes@localhost:.hermes/scripts/night-queue.py
-scp -P 22220 jobs/night-tasks.md hermes@localhost:jobs/night-tasks.md
-```
-
-Then limit every cron job to the web tools, and create the job:
-
-```bash
-# Runs in: inside the VM. Safe to run twice: the create is skipped when the job exists.
-hermes config set platform_toolsets.cron "[web]"
-grep -n -A2 '^  cron:' ~/.hermes/config.yaml        # must list only web
-if hermes cron list | grep -q 'night-tasks'; then
-  echo "skip: the night-tasks job already exists"
-else
-  hermes cron create --name night-tasks --script night-queue.py --deliver telegram --catch-up on '0 3 * * *' "$(cat ~/jobs/night-tasks.md)"
-fi
-hermes cron list                                    # night-tasks, 0 3 * * *, script night-queue.py, deliver telegram
-```
-
-After changing `jobs/night-tasks.md`, copy it again and update the job with
-`hermes cron edit JOB_ID --prompt "$(cat ~/jobs/night-tasks.md)"`, using the
-ID that `hermes cron list` shows. To see what tonight's run would get,
-without marking anything done, read the queue with
-`grep -i '^night:' ~/.hermes/memories/MEMORY.md` in the VM.
+then shows `"exit_code": 143`.
 
 ### Tests
 
@@ -588,23 +492,17 @@ The tests run on the host with fakes for the VM, the router and the network:
 ```bash
 # Runs in: local terminal, host, in this repo. Each must end with failed=0 and exit 0.
 bash jobs/test-run-topic-scout.sh    # passed=58
-bash jobs/test-run-news-digest.sh    # passed=24
 bash jobs/test-add-idea.sh           # passed=37
-bash jobs/test-add-rating.sh         # passed=57
-python3 jobs/test-news-collect.py    # passed=36
-python3 jobs/test-night-queue.py     # passed=29
 ```
 
 ### Repo layout
 
 | Path                                                                  | What it is                                     |
 | --------------------------------------------------------------------- | ---------------------------------------------- |
-| `jobs/run-topic-scout.sh`, `jobs/run-news-digest.sh`              | The runners, one per job                       |
+| `jobs/run-topic-scout.sh`                                           | The runner                                     |
 | `jobs/runner-lib.sh`                                                | Shared runner code: SSH, lock, status, signals |
 | `jobs/*.md`                                                         | Prompts Hermes receives                        |
-| `jobs/add-idea.sh`, `jobs/add-rating.sh`, `jobs/check-scout.sh` | The scripts that hold each job's rules         |
-| `jobs/news-collect.py`                                              | Fetches the news candidates on the host        |
-| `jobs/night-queue.py`                                               | Feeds queued night tasks to the VM's cron job  |
+| `jobs/add-idea.sh`, `jobs/check-scout.sh`                         | The scripts that hold the job's rules          |
 | `jobs/test-*`, `jobs/fixtures/`                                   | Tests and their fixtures                       |
 | `out/`                                                              | Results and logs, gitignored                   |
 | `PLAN.md`, `AGENTS.md`                                            | The why, and the rules for coding agents       |

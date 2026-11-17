@@ -129,98 +129,17 @@ approves every stage by hand.
    flags. Casey passes the names by hand, because the VM cannot see Jobhunt's
    database. That is deliberate, and it stays hand-fed. Whether the hub may
    pass company names into the VM is open (see *Open questions*).
-6. **Daily news digest from public APIs.** Added 2026-09-26, to build after
-   the topic scout (#1) closes. Each day, one Markdown file of the day's
-   posts, each rated on two scales:
-   - **How big the news is**, computed from the API data (points, comments,
-     how fast they grew, and whether the story appears in more than one
-     place). A calculation, not a model's opinion.
-   - **Interest to Casey**, rated 1 to 5 by Hermes against Casey's interest
-     profile, `~/Apps/Portfolio/CASEY-INTERESTS.md` (tiers of topics plus an
-     "affects my machine" list), with a one-line reason, and related stories
-     grouped.
-
-   Sources: public, keyless APIs only, each checked before building
-   (2026-09-27): Hacker News through Algolia's search API, Hugging Face's
-   trending models, and arXiv (its API terms allow personal use at one
-   request every three seconds, and its metadata is CC0). Out: Reddit (its
-   Data API needs a registered app) and Lobsters (its robots.txt disallows
-   all clients and declares `ai-input=no`, which rating by a model is). A
-   further source is added only after the same check. Reddit, rechecked
-   2026-11-05: its `robots.txt` is `User-agent: *` `Disallow: /`, so its
-   anonymous feeds suit only a single fetch Casey asks for, never a
-   scheduled job. Hermes's official `reddit-reading` skill is installed in
-   the VM and was reviewed: read-only, Reddit hosts only, no file writes,
-   and it switches to the OAuth API when `REDDIT_CLIENT_ID` and
-   `REDDIT_CLIENT_SECRET` are set. It runs through `terminal`, so it works
-   from the CLI in the VM, not from Telegram or the night job. Reddit
-   becomes a night-task source only after Casey registers an OAuth app. The collector,
-   `jobs/news-collect.py`, runs on the host and writes a dated candidates
-   file per run, which is also the history trends will be counted from.
-
-   Design, from the topic scout's lessons: a script collects the candidates
-   through the APIs, so every link comes from the API and none is invented,
-   and Hermes only rates a bounded list, so its context stays small. Every
-   rating goes through `jobs/add-rating.sh`, which holds the profile's
-   scoring section as a rule: each rating names what matched (machine,
-   tier1, tier2, tier3, none, not-interested) and its score must fit that
-   (5, 5 or 4, 4, 3, 2, 1). A script, not the model, renders the digest.
-   Items that are not tech news and match no tier count as not-interested,
-   because the profile's scale only defines 2 for tech news. "How big" is
-   the source's own numbers for now. A computed size rating and grouping
-   related stories come later. First run (2026-09-27): all 62 rated in 2
-   minutes with no line refused, but the MATCH was often wrong, because the
-   script checks that a score fits its MATCH and not that the MATCH fits the
-   item. `machine` went to agent news that touches nothing on the machine,
-   `tier1` was always scored 4 ("in passing") and never 5, and `tier3` was
-   used as a "casual AI" catch-all though the profile's Tier 3 is cats,
-   e-commerce, hosting and content pipelines. WordPress and Core Web Vitals
-   items (Tier 1) landed in tier3. So the script now checks the MATCH too: a
-   machine or tier rating quotes a term from that MATCH's own section of the
-   profile, and tier1 at 4 must say "in passing". A loose quote from inside
-   the right section (Drawgent quoting "agents", from the machine section's
-   "Agents and VMs" label) still passes. Round 2 (Casey's profile edit, 2026-09-27)
-   narrowed two broad Tier 1 phrases and added a Tier 2 bullet for agent
-   research and other models: items at 5 fell from 25 to 10 to 12 of 62,
-   run-to-run agreement from 92% to 82% as more items sat on the Tier 1 and
-   Tier 2 line. The lever that worked was the profile's wording, not the
-   script: the model follows the words it can quote. Round 3 narrowed the
-   wording again (no bare "coding agents", GGUF tied to LLMs) and capped
-   arXiv papers at 4 unless machine, after research papers took top slots
-   through broad terms. It over-corrected: items at 5 fell to 8 and 2,
-   agreement to 79%, and LLMs that fit this machine drifted to Tier 2
-   through its "other new open-weight models" line. Round 4 (2026-09-30)
-   narrowed that line to non-LLM models and LLMs over 35B, and the script
-   now refuses a quote that is only a bold section heading ("AI
-   automation"), the split behind most of the run-to-run disagreement.
-   Round 5 found the model reading the profile's Tuning notes as rules
-   (run 13 cited them to drop two LLMs to `none`), so the profile now goes
-   into the VM without that section. Runs 14 and 15 then agreed on 85%,
-   the best since round 1, with every LLM that fits this machine at 5.
-   What still splits is 4 against `none`, for papers and models with no
-   size in their name: the next lever is rating those in a script.
-   Phases 9 and 10 (2026-09-30) did that for Hugging Face: the collector
-   records each model's total parameters, and `add-rating.sh --hf` rates
-   every HF item from its kind and size before Hermes starts, so Hermes
-   rates only HN and arXiv. Phase 11 (2026-10-01) removed the arXiv cap's
-   machine exemption after run 16 put a scaling-laws paper at machine 5 by
-   quoting "MoE layers": a paper now rates at most 4.
-
-   The profile is personal, so it lives in Portfolio next to MASTER-CASEY.md,
-   gitignored there like it, as its single source (Casey moved it there
-   2026-09-27 after a morning in this repo's root, gitignored). It is never
-   copied into this repo, and it is copied into the VM only for a digest
-   run. That
-   run has no web tools (the script already fetched everything), so nothing
-   from the profile can leave the machine in a search query. It was drafted
-   2026-09-26 from MASTER-CASEY.md, the interests Casey named (local and
-   frontier AI, US stocks and trading, Bitcoin and Ethereum, PC gaming and
-   self-hosting hardware, Arch Linux), and what is installed on the
-   workstation. Topics start broad and Casey tunes them.
-
-   Stocks and crypto items are information, not advice. Hermes never connects
-   to a brokerage or exchange account and never trades. It runs daily as
-   `jobs/run-news-digest.sh` (see *Scheduling*).
+6. **Daily news digest from public APIs.** Built 2026-09-27 to 2026-10-20
+   and removed 2026-11-17 (Casey), when Hermes became a Telegram search
+   assistant. The runner, collector, rating script and their findings are
+   in git history before that date. Two lessons carry over. A script, not
+   the model, should fetch and render, so every link comes from a source.
+   And the lever on the model's judgement was the wording it could quote,
+   not stricter checks. Reddit, rechecked 2026-11-05: its `robots.txt` is
+   `User-agent: *` `Disallow: /`, so its anonymous feeds suit only a single
+   fetch Casey asks for. Hermes's reviewed `reddit-reading` skill runs
+   through `terminal`, so it works from the CLI in the VM, not from
+   Telegram or a cron job, until Casey registers an OAuth app.
 7. **Weekly routine that ends in a review queue.** Added 2026-09-26. One
    weekly run, at a quiet hour, that leaves everything waiting for Casey and
    takes no outward action. Each part runs where it belongs:
@@ -235,7 +154,6 @@ approves every stage by hand.
    - **SEO-LLM briefs:** at most, pre-running the research-collection stage
      for ideas Casey picked, stopping at the first approval gate. An SEO-LLM
      phase, planned in that repo.
-   - **News:** the daily digest (#6).
 
    Never automated, by rule rather than by limit: submitting an application
    (the final outward-facing action is Casey's, and Jobhunt never clicks
@@ -259,17 +177,15 @@ and n8n, bound to 127.0.0.1) will schedule the jobs. It does not exist yet.
 and uses it as a research and data-organizing assistant, mostly overnight,
 and keeps running Jobhunt and SEO-LLM by hand. So the hub and n8n are on
 hold, and the notes below stay for when they return. The runners
-(`jobs/run-topic-scout.sh`, `jobs/run-news-digest.sh`) stay as they are, for
-hand runs.
+(`jobs/run-topic-scout.sh`) stays as it is, for hand runs. The news digest
+runner was removed 2026-11-17.
 
 - **Each job is one non-interactive host command with a stable contract:**
-  `jobs/run-topic-scout.sh` (weekly) and `jobs/run-news-digest.sh` (daily).
-  They share one exit contract with Jobhunt and SEO-LLM: 0 ok, 2 usage, 10
+  `jobs/run-topic-scout.sh` (weekly). It shares one exit contract with Jobhunt and SEO-LLM: 0 ok, 2 usage, 10
   input or config, 11 needs a person, 12 a stage failed, 13 a service the run
-  needs is down, 14 busy. Each writes `out/<job>/status.json`. The README's
+  needs is down, 14 busy. It writes `out/scout/status.json`. The README's
   *How to use* section has the details.
-- **Until the hub exists, Casey runs them by hand,** the scout weekly and the
-  news daily. After that, the hub's host runner calls them from the repo
+- **Until the hub exists, Casey runs it by hand,** weekly. After that, the hub's host runner calls them from the repo
   root, starts each under `setsid`, stops one by its process group, and
   retries only on 13 and 14.
 - **A Telegram gateway and Hermes's own scheduler run in the VM** (reversed
@@ -279,21 +195,15 @@ hand runs.
   VM. The runners still drive Hermes the way a hand-run does (copy in, run
   over SSH on port 22220, copy out), and never start or stop the VM, take
   snapshots, or change Hermes's config.
-- **Night tasks are queued through memory, and one fixed job runs them**
-  (Casey, 2026-11-05, option A of three). Casey asks in Telegram, Hermes
-  saves an entry starting `NIGHT:` with its `memory` tool, and the
-  `night-tasks` cron job (03:00 VM time) gets up to 3 unrun entries from
-  `jobs/night-queue.py`. Reason: Telegram must not get the `cronjob` tool,
-  because a job's own `enabled_toolsets` beats `platform_toolsets.cron`
-  and the model-facing tool forwards it, so qwen (or a web page it read)
-  could create a job with `terminal`. Rejected: `/cron add` from Telegram
-  (`/cron` is CLI-only) and queueing over SSH (not from the phone). Casey
-  creates the one job over SSH, and `platform_toolsets.cron: [web]` holds
-  every cron job to the web tools, because `hermes cron create` has no
-  toolset flag. The job has no file tool, so a page cannot get it to read
-  `~/.hermes/.env` and leak the token through a fetched URL. A page read
-  in a Telegram chat could still plant a `NIGHT:` entry. Its worst case is
-  a web-only run whose result goes to Casey, so that risk is accepted.
+- **Night tasks were removed on 2026-11-17 (Casey).** They queued
+  `NIGHT:` memory entries for one fixed 03:00 job (Phases 34 to 39). Casey
+  now wants to schedule tasks from Telegram directly (Phases 45 and 46).
+- **Telegram does not have the `cronjob` tool yet.** A job's own
+  `enabled_toolsets` beats `platform_toolsets.cron`, and the model-facing
+  tool forwards it, so qwen (or a web page it read) could create a job
+  with `terminal`, read `~/.hermes/.env`, and leak the bot token through a
+  fetched URL. Telegram gets the tool only behind a plugin guard that
+  rejects anything beyond web (Phase 45). `/cron` is CLI-only.
 - **Hermes never calls the hub,** holds no hub token, and never sees Jobhunt
   or SEO-LLM data. Every output still ends in a file Casey reviews.
 - **The runners need an SSH key for `hermes@localhost`,** because they never
@@ -451,12 +361,11 @@ first change, Phase 33):
 |---|---|---|---|---|
 | `~/.hermes/.env` | The bot token and the allowed user ID | Kept | Rolled back to the snapshot | Lost. Casey runs `hermes gateway setup` again |
 | `~/.hermes/config.yaml` | The Telegram toolsets and `telegram:` keys | Kept | Rolled back | Lost. The README's Telegram block re-applies them |
-| `~/.hermes/config.yaml` `platforms.telegram.extra.dm_topics`, and `TELEGRAM_CRON_THREAD_ID` in `~/.hermes/.env` | The three topics with their thread IDs, and the topic night results post to (Phase 38) | Kept | Rolled back | Lost. The README's *Topics* block re-adds them, and Telegram makes new topics |
+| `~/.hermes/config.yaml` `platforms.telegram.extra.dm_topics`, and `TELEGRAM_CRON_THREAD_ID` in `~/.hermes/.env` | The three topics with their thread IDs, and the topic cron results post to (Phase 38) | Kept | Rolled back | Lost. The README's *Topics* block re-adds them, and Telegram makes new topics |
 | `~/.config/systemd/user/` | The gateway's service unit | Kept | Rolled back | Lost. `hermes gateway install` again |
 | `/var/lib/systemd/linger/hermes` | Starting the user service at boot with no login | Kept | Rolled back | Lost. `sudo loginctl enable-linger hermes` again |
-| `~/.hermes/scripts/night-queue.py`, `~/jobs/night-tasks.md` | The night-task feeder and prompt (Phase 34) | Kept | Rolled back | Lost. The README's *Night tasks* block copies them from `jobs/` |
-| `~/.hermes/cron/jobs.json` | The `night-tasks` job | Kept | Rolled back | Lost. The README's *Night tasks* block creates it again |
-| `~/.hermes/memories/MEMORY.md`, `~/jobs/night-queue-done.txt` | The queue, and the hashes of tasks already run | Kept | Rolled back, so tasks run since the snapshot could run again | Lost, by design: no copy in the repo |
+| `~/.hermes/cron/jobs.json` | Cron jobs | Kept | Rolled back | Lost. Jobs are recreated by hand |
+| `~/.hermes/memories/MEMORY.md` | Hermes's memory | Kept | Rolled back | Lost, by design: no copy in the repo |
 
 The token and the user ID have no copy in this repo by design (a secret,
 and an account identifier). Everything else has its durable copy in the
@@ -476,7 +385,7 @@ The step-by-step setup (check the host, build the VM, install Hermes, point it
 at the router, snapshots, removal) is in
 [`README.md`](README.md#setup-guide). The
 findings behind its settings are here, so the README can stay short. The job
-findings are under Good fits #1 and #6, and the router's under *How the
+findings are under Good fits #1, and the router's under *How the
 router serves Hermes*.
 
 **The VM and the install**
@@ -582,62 +491,23 @@ router serves Hermes*.
   forwards 22220 on all host interfaces (`0.0.0.0`). Password login is off
   since 2026-11-04 (`/etc/ssh/sshd_config.d/10-no-password.conf`).
 
-**Night tasks** (Phase 34, 2026-11-05, read from v0.22.7's source and help)
-- Memory entries are split by `"\n§\n"` (`ENTRY_DELIMITER`,
-  `tools/memory_tool_store.py`), and `MEMORY.md` holds
-  `memory_char_limit` characters, 2200 by default. Hermes rewords what it
-  saves ("today's" was saved as "todays"), so the feeder matches only a
-  leading `NIGHT:`, in any case, and never the wording.
-- A cron `--script` runs only from `~/.hermes/scripts/`, `.sh` under bash
-  and anything else under Hermes's Python. Its stdout goes into the
-  prompt, and an empty stdout skips the model call
-  (`cron/scheduler.py`: "script produced no output, skipping AI call").
-- `hermes cron create` and `edit` have no toolset flag, and
-  `platform_toolsets.cron` was unset, so cron jobs had Hermes's default
-  tools until Casey set `[web]`.
-- The feeder records a task as done before printing it, so a task runs at
-  most once, even when the run fails.
-- Time (Phase 35): the VM is `America/New_York`, the same zone as the
-  host, and no profile `timezone:` is set. The job runs at 03:00, moved
-  from 02:00 on 2026-11-05 (Casey), because 02:00 does not exist on the
-  March daylight-saving night. A missed run follows, in order: the job's
-  own `catch_up`, then skip past an explicit `grace_minutes`, then
-  `cron.catch_up_missed` (`cron/missed_runs.py`). A test set
-  `grace_minutes`, which `cron edit` cannot clear, and a run missed past
-  it was skipped despite `catch_up_missed: true`. So the job carries
-  `--catch-up on`: a run missed while the VM was off runs once when it
-  starts again.
-  `HERMES_CRON_TIMEOUT` is unset: 600 s of inactivity, not total time.
-  Untested: whether that limit trips, and fails loudly, when the router's
-  one slot is busy with a long hand run (deferred 2026-11-05, Casey).
-- Failure (Phase 35): a feeder that exits 1 does not stop the run.
-  Hermes injects a `## Script Error` section ("Report this to the user")
-  and runs the model anyway. Before the fix the model ignored it, the run
-  was booked `completed`, and nothing failed loudly. `cron edit --script`
-  does refuse a missing file. The prompt now opens with a "First" section:
-  on a Script Error, reply `[CRON_FAILURE]` and do no tasks. Retested:
-  the run was booked `failed` and Telegram got "Cron 'night-tasks'
-  failed" with the error.
-- Memory (Phase 35): cron runs always load `MEMORY.md`
-  (`cron/scheduler.py`, `skip_memory=False`), and `memory.memory_enabled`
-  is global, so the queue cannot be hidden from the night model. With no
-  task list, the model did all 5 `NIGHT:` entries again, done ones
-  included. So "each task runs once" rests on the feeder's list plus the
-  prompt rule never to do memory `NIGHT:` entries. Retested with 5 old
-  entries and 1 new: only the new one ran.
-- Pruning (Phase 39, 2026-11-06): the feeder removes every `NIGHT:` entry
-  whose hash is in the done list from `MEMORY.md`, tonight's included, so
-  old tasks stop filling the 2,200-character store. It holds Hermes's own
-  lock for the whole run (exclusive `flock` on `MEMORY.md.lock`, opened as
-  Hermes opens it) and writes as Hermes does (`§`-joined entries, temp file
-  and rename, mode 0600). Hermes re-reads the file under that lock before
-  each change, so neither side drops the other's entries. A busy lock for
-  10 seconds fails the run with nothing recorded. With nothing to remove,
-  the file is not rewritten.
-- First real night (2026-11-06): the host was off at 03:00 and booted at
-  05:03, the VM started at 05:08:27, and the job caught up at 05:08:55
-  with the queued task's result in Telegram. A run firing on time at
-  03:00 with the VM already up has not been seen yet.
+**Cron** (read from v0.22.7's source and help, Phases 34 and 35. The
+night-task job these were found on was removed 2026-11-17.)
+- A cron `--script` runs only from `~/.hermes/scripts/`. Its stdout goes
+  into the prompt, and an empty stdout skips the model call
+  (`cron/scheduler.py`). A script that exits non-zero does not stop the
+  run: Hermes injects a `## Script Error` section and runs the model
+  anyway, so a prompt must turn that into `[CRON_FAILURE]` to fail loudly.
+- `hermes cron create` and `edit` have no toolset flag. Unset,
+  `platform_toolsets.cron` gives cron jobs Hermes's default tools,
+  terminal included. It is `[web]`.
+- Cron runs always load `MEMORY.md` (`skip_memory=False`).
+- The VM is `America/New_York`, like the host. A missed run follows, in
+  order: the job's own `catch_up`, then skip past an explicit
+  `grace_minutes`, then `cron.catch_up_missed` (`cron/missed_runs.py`).
+  `cron edit` cannot clear `grace_minutes`. Avoid 02:00 schedules, which
+  do not exist on the March daylight-saving night.
+- `HERMES_CRON_TIMEOUT` is unset: 600 s of inactivity, not total time.
 
 **Topic scout checks**
 - The field check catches "Best ..." titles typed anything but `roundup`:

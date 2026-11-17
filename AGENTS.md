@@ -1109,12 +1109,18 @@ repos, and one ended in a colon with no template after it.)
   `/health` and `/v1/models`, `llm status`, `journalctl`, `quickemu --version`)
   are the agent's own job. (2026-09-25)
 - **The router is Local-LLM's contract, consumed here and never changed from
-  here.** Port 8080, the model names `gemma`, `qwen`, and `lite`, and the
+  here.** Port 8080, the model names `freedom`, `gemma`, `qwen`, and `lite`, and the
   131,072 context are fixed by Local-LLM for Jobhunt and SEO-LLM as well. A
   need to change any of them is raised as a Local-LLM change, not worked
   around in the Hermes config. Hermes's `model.context_length` follows the
   router's served value. (2026-09-25. Context 65,536 until Local-LLM raised it
-  on 2026-10-30, and Hermes followed on 2026-11-04.)
+  on 2026-10-30, and Hermes followed on 2026-11-04.) One exception: Hermes
+  sends `Host: localhost:8080` (`model.default_headers`) to pass llama.cpp's
+  loopback Host check under `--cors-origins localhost`, which since the
+  2026-11-16 build rejected every call from the VM's `10.0.2.2`. The check
+  guards against browsers, and the VM was already trusted to reach the
+  router, so this opens nothing new. Do not remove it without a Local-LLM
+  change that allows the VM's address. (2026-11-17, Casey.)
 - **Hermes's one outward channel is Casey's Telegram gateway.** It carries
   replies and scheduled-task results to Casey's private chat and answers
   Casey's user ID only. Hermes never publishes, submits, or pushes anywhere

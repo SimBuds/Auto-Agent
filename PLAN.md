@@ -38,7 +38,7 @@ SEO-LLM data, or send anything outside Casey's private chat.
 ```text
 Host (this machine)                      QEMU VM (Debian, quickemu)              Phone
   llama-server router 127.0.0.1:8080 <--  Hermes Agent                       -->  Telegram, one private chat
-    qwen pinned, one model at a time       base_url http://10.0.2.2:8080/v1       topics General, Research, Night
+    freedom pinned, one at a time          base_url http://10.0.2.2:8080/v1       topics General, Research, Night
     GPU: RTX 3080 10 GB                    gateway service, cron scheduler
                                            terminal backend local (the VM is the sandbox)
 ```
@@ -63,9 +63,18 @@ has no access to the host's files or repos.
 ## What we learned
 
 **Model and router**
-- Use `qwen` (Qwen 3.6 35B A3B). It made 39 of 39 tool calls in Local-LLM's
+- Use `freedom` (an uncensored Qwen 3.6 35B A3B, Casey's choice
+  2026-11-17). Its tool calling is not measured here yet. `qwen`, the same
+  base model, made 39 of 39 tool calls in Local-LLM's
   tool test, `lite` 36, `gemma` 27. Pin one model so Hermes never makes the
   router swap.
+- llama.cpp builds from 2026-11-16 on (commit `a1a68eb79`) reject any
+  request whose `Host` header is not loopback when `--cors-origins` is
+  `localhost`, with "Cross-origin request not allowed". The VM reaches the
+  router as `10.0.2.2`, so every call failed with HTTP 403, which Hermes
+  reports as a rejected API key. Hermes sends `Host: localhost:8080`
+  through `model.default_headers` instead. The check guards against
+  browsers, and the VM was already allowed in, so nothing new is opened.
 - The router has one slot. Sub-agents and parallel tool calls wait their
   turn, and so do Jobhunt and SEO-LLM while Hermes works.
 - An idle model sleeps after 10 minutes and frees its VRAM. Hermes makes no

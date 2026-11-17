@@ -15,7 +15,7 @@ Host                                     VM (Debian, quickemu)
 
 **You need:** a Linux host with [quickemu](https://github.com/quickemu-project/quickemu),
 and an OpenAI-compatible llama.cpp router on the host's loopback. This repo
-was built against the Local-LLM router (models `gemma`, `qwen`, `lite`,
+was built against the Local-LLM router (models `freedom`, `gemma`, `qwen`, `lite`,
 context 131,072). Anything that differs on your machine is listed in
 [How to tailor](#how-to-tailor).
 
@@ -98,12 +98,13 @@ The next step sets the endpoint, and the gateway stays off.
 # Runs in: inside the VM. Safe to re-run: each line overwrites the same key.
 hermes config set model.provider custom
 hermes config set model.base_url http://10.0.2.2:8080/v1
-hermes config set model.default qwen
+hermes config set model.default freedom
 hermes config set model.api_key local
 hermes config set model.context_length 131072
+hermes config set model.default_headers '{"Host": "localhost:8080"}'
 hermes config set skills.write_approval true
 hermes config set auxiliary.background_review.enabled false
-grep -n -E 'base_url|default:|context_length|write_approval' ~/.hermes/config.yaml
+grep -n -E 'base_url|default:|context_length|write_approval|Host:' ~/.hermes/config.yaml
 grep -n -A1 'background_review:' ~/.hermes/config.yaml   # the line after must show enabled: false
 grep -n 'local_runtime' -A2 ~/.hermes/config.yaml         # nothing, or enabled: false
 ```
@@ -304,6 +305,37 @@ fi
 To undo, restore `~/.hermes/config.yaml.before-topics`, delete the
 `TELEGRAM_CRON_THREAD_ID=` line from `.env`, and restart the gateway.
 
+#### Asking for research
+
+Send these in the Research topic, starting with `/new`. Edit the topic and
+the "I run ..." line to suit. Each asks for a quote per fact, because
+tested replies (2026-11-17) were accurate where they quoted the page and
+drifted where they did not: a number added, a word made stronger, or a
+fact credited to the wrong source. Treat a reply as a map. Before acting
+on a claim, open its link.
+
+**News** (tested: quoted facts all held up)
+
+```text
+Search the web for the most important open-weight AI model and llama.cpp news from the past 7 days. I run local models on a single RTX 3080 (10 GB) with llama.cpp on Linux, NVIDIA/CUDA only, so skip AMD/HIP, Apple and funding news. Give me up to 5 items; fewer is fine. Check each page's own date and drop anything older than 7 days. For each: a bold one-line headline, the date, a short exact quote from the page that supports it, one sentence on why it matters to me, and the link. Every fact needs a quote or leave it out. End with a "Sources" list.
+```
+
+**Products and prices** (tested: quoted prices with store links; an
+earlier version without the quote rule returned prices with no links)
+
+```text
+Find three well-reviewed PRODUCT under BUDGET CAD sold in Canada. Use only prices you saw on a page you opened. For each: model, price, store, a short exact quote from the page showing the price, rating if shown, and the link. If a store page would not load or showed no price, write "price not confirmed" and give the link anyway. Then one sentence of recommendation. Do not fill in any price you did not see.
+```
+
+Prices change daily. Confirm on the store page before buying.
+
+**Deep research** (tested: the core findings were real, some details
+stretched)
+
+```text
+Research this question and answer it for me: QUESTION. Start with a 3-sentence answer. Then group the evidence under short headings, each claim with a short exact quote from the page and its link. Say when a source's setup differs from mine (I run llama.cpp on one RTX 3080, 10 GB). Do not state the same finding twice. End with what is still uncertain and a "Sources" list. Keep it short enough to read on a phone.
+```
+
 #### Scheduling from Telegram
 
 Ask in any topic, in plain words: "every weekday at 8am, find the top
@@ -386,7 +418,8 @@ setup.
 | --------------------------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | `model.provider`                      | `custom`                                       | Any OpenAI-compatible server                                                                                                                    |
 | `model.base_url`                      | `http://10.0.2.2:8080/v1`                      | The host's router, through QEMU's address for the host                                                                                          |
-| `model.default`                       | `qwen`                                         | One pinned model                                                                                                                                |
+| `model.default` | `freedom` | One pinned model: the uncensored Qwen 3.6 35B A3B |
+| `model.default_headers` | `{Host: localhost:8080}` | Passes llama.cpp's loopback Host check from inside the VM (see PLAN.md, *Model and router*) |
 | `model.api_key`                       | `local`                                        | A placeholder: the router has no auth                                                                                                           |
 | `model.context_length`                | `131072`                                       | The router's context, stated rather than guessed                                                                                                |
 | `skills.write_approval`               | `true`                                         | Skills Hermes writes wait in `~/.hermes/pending/skills/` until you approve them (`/skills pending`, `/skills approve`)                    |

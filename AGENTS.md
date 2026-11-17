@@ -1116,7 +1116,7 @@ repos, and one ended in a colon with no template after it.)
   router's served value. (2026-09-25. Context 65,536 until Local-LLM raised it
   on 2026-10-30, and Hermes followed on 2026-11-04.)
 - **Hermes's one outward channel is Casey's Telegram gateway.** It carries
-  replies and night-task results to Casey's private chat and answers
+  replies and scheduled-task results to Casey's private chat and answers
   Casey's user ID only. Hermes never publishes, submits, or pushes anywhere
   else. Setting up the gateway and its token stay Casey's, and the agent
   does not configure Hermes to publish, submit, or push. Jobhunt data never

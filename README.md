@@ -3,7 +3,9 @@
 [Hermes Agent](https://github.com/NousResearch/hermes-agent) running in a
 QEMU virtual machine, using models served by a llama.cpp router on the host.
 The VM is the sandbox: Hermes runs its tools freely inside it, and a snapshot
-undoes whatever it did. You talk to it through a private Telegram chat.
+undoes whatever it did. You talk to it through a private Telegram chat, as a
+search assistant for tech and AI news, products and prices, and deep
+research, which can also schedule tasks and post the results back.
 
 ```text
 Host                                     VM (Debian, quickemu)
@@ -17,8 +19,8 @@ was built against the Local-LLM router (models `gemma`, `qwen`, `lite`,
 context 131,072). Anything that differs on your machine is listed in
 [How to tailor](#how-to-tailor).
 
-[`PLAN.md`](PLAN.md) holds the why: the findings behind each
-setting, and the load on the GPU.
+[`PLAN.md`](PLAN.md) holds the purpose, what was learned behind each
+setting, and the roadmap.
 
 ## Setup guide
 
@@ -302,6 +304,50 @@ fi
 To undo, restore `~/.hermes/config.yaml.before-topics`, delete the
 `TELEGRAM_CRON_THREAD_ID=` line from `.env`, and restart the gateway.
 
+#### Scheduling from Telegram
+
+Ask in any topic, in plain words: "every weekday at 8am, find the top
+three llama.cpp changes and summarize them with links". Hermes creates a
+cron job, and each run posts its result back in the topic you asked from.
+Ask "list my scheduled tasks" or "remove the llama.cpp task" the same way.
+`/cron` does not work in Telegram (it is CLI-only).
+
+Every scheduled job can only use the web tools, and the `aa_guard` plugin
+(`hermes-plugin/aa_guard/`) refuses any job that asks for more: other
+tools, a script, a working directory, or delivery anywhere but the chat it
+came from. A refused request comes back as "Scheduling blocked by
+aa_guard: ...". Why the guard exists is in PLAN.md, *What we learned*, *Cron*.
+
+Install the plugin, then give Telegram the `cronjob` toolset. The guard must
+be enabled before the tool is added:
+
+```bash
+# Runs in: local terminal, host, in this repo, with the VM running. Safe to run twice: scp overwrites.
+python3 hermes-plugin/test_aa_guard.py                      # must end passed=23 failed=0
+ssh -p 22220 hermes@localhost 'mkdir -p ~/.hermes/plugins/aa_guard'
+scp -P 22220 hermes-plugin/aa_guard/plugin.yaml hermes-plugin/aa_guard/__init__.py hermes@localhost:.hermes/plugins/aa_guard/
+ssh -p 22220 hermes@localhost 'ls ~/.hermes/plugins/aa_guard'   # must list __init__.py plugin.yaml
+```
+
+```bash
+# Runs in: inside the VM. Safe to run twice. Telegram is down for about 30 s.
+hermes plugins enable aa_guard
+hermes plugins list --plain --no-bundled                    # aa_guard must show enabled
+if hermes plugins list --plain --no-bundled | grep -q 'aa_guard.*enabled'; then
+  hermes config set platform_toolsets.telegram "[web, todo, clarify, session_search, memory, cronjob]"
+  grep -n -A7 '^  telegram:' ~/.hermes/config.yaml | head -n 8   # must list the five tools plus cronjob
+  systemctl --user restart hermes-gateway.service
+  sleep 45
+  systemctl --user is-active hermes-gateway.service         # must print active
+  grep -n -i 'aa_guard' ~/.hermes/logs/gateway.log | tail -n 5   # a load line for aa_guard, and no error
+else
+  echo "STOP: aa_guard is not enabled. Telegram was not given the cronjob tool."
+fi
+```
+
+To undo, set `platform_toolsets.telegram` back to the five tools, restart
+the gateway, then `hermes plugins disable aa_guard`.
+
 ## How to tailor
 
 ### VM settings
@@ -345,7 +391,7 @@ setup.
 | `model.context_length`                | `131072`                                       | The router's context, stated rather than guessed                                                                                                |
 | `skills.write_approval`               | `true`                                         | Skills Hermes writes wait in `~/.hermes/pending/skills/` until you approve them (`/skills pending`, `/skills approve`)                    |
 | `auxiliary.background_review.enabled` | `false`                                        | Stops the post-run review drafting skills and memory notes on its own                                                                           |
-| `platform_toolsets.telegram`          | `[web, todo, clarify, session_search, memory]` | Telegram chats can search the web, plan, ask you questions, search past chats and keep notes. They cannot run commands or write files           |
+| `platform_toolsets.telegram`          | `[web, todo, clarify, session_search, memory, cronjob]` | Telegram chats can search the web, plan, ask you questions, search past chats, keep notes and schedule tasks (guarded by `aa_guard`). They cannot run commands or write files |
 | `platform_toolsets.cron`              | `[web]`                                        | Every cron job can only search and read the web. Unset, cron jobs get Hermes's default tools, terminal included |
 
 Leave the managed local runtime (`local_runtime`) off, since a second
@@ -357,4 +403,5 @@ reuses without asking, so read its `SKILL.md` before trusting it.
 
 | Path                   | What it is                               |
 | ---------------------- | ---------------------------------------- |
+| `hermes-plugin/aa_guard/`, `hermes-plugin/test_aa_guard.py` | The cron guard plugin and its tests |
 | `PLAN.md`, `AGENTS.md` | The why, and the rules for coding agents |

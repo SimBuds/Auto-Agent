@@ -17,7 +17,7 @@ A specialized search assistant that organizes what it finds:
 - **Organize:** results come back as Telegram summaries in a fixed shape
   (a short answer, then grouped findings, then sources).
 - **Schedule:** Casey asks in chat for a recurring task ("every weekday at
-  8am, ...") and its results post back in the same topic.
+  8am, ...") and its results post back in the same chat.
 
 What it never does: publish, submit, post or push anywhere, touch Jobhunt or
 SEO-LLM data, or send anything outside Casey's private chat.
@@ -38,7 +38,7 @@ SEO-LLM data, or send anything outside Casey's private chat.
 ```text
 Host (this machine)                      QEMU VM (Debian, quickemu)              Phone
   llama-server router 127.0.0.1:8080 <--  Hermes Agent                       -->  Telegram, one private chat
-    freedom pinned, one at a time          base_url http://10.0.2.2:8080/v1       topics General, Research, Night
+    freedom pinned, one at a time          base_url http://10.0.2.2:8080/v1       one plain chat, no topics
     GPU: RTX 3080 10 GB                    gateway service, cron scheduler
                                            terminal backend local (the VM is the sandbox)
 ```
@@ -49,9 +49,9 @@ has no access to the host's files or repos.
 
 ## How Casey uses it
 
-- **Ask in a topic.** Each topic is its own session. Memory and skills are
+- **Ask in the chat.** `/new` starts a fresh session. Memory and skills are
   shared. Send `/new` when a chat starts repeating itself.
-- **Schedule by asking.** A job created in a topic posts its results there.
+- **Schedule by asking.** A job's results post back in the chat.
 - **Write prompts the way Hermes's docs advise** for scheduled work: fully
   self-contained (a job starts fresh and does not see the chat), who the
   reader is and what to skip, a time window ("past 24 hours"), the output
@@ -115,9 +115,10 @@ has no access to the host's files or repos.
 - The gateway unit restarts itself after a crash (`Restart=always`), and a
   manual `systemctl --user stop` stays stopped. Starting at boot with no
   login needs `sudo loginctl enable-linger hermes`.
-- Topics declared in `platforms.telegram.extra.dm_topics` are created at
-  gateway start once BotFather's Threaded Mode is on. With Threaded Mode
-  there is no plain chat: a message in All Messages opens a new topic.
+- Topics (`platforms.telegram.extra.dm_topics` with BotFather's Threaded
+  Mode) were tried and dropped for one plain chat (2026-11-17). With
+  Threaded Mode on there is no plain chat, and deleted topics leave Hermes
+  holding dead thread IDs (`dm_topics`, `TELEGRAM_CRON_THREAD_ID`).
 
 **Cron**
 - Hermes's own scheduler runs inside the gateway, so jobs only fire while
@@ -131,6 +132,13 @@ has no access to the host's files or repos.
   `aa_guard` plugin (`hermes-plugin/aa_guard/`) closes that: it refuses any
   job asking for more than web tools and the chat it came from, or setting
   an argument not on its reviewed list.
+- Tested in Telegram on v0.23.2 (2026-11-17): a job asked with
+  `enabled_toolsets ["terminal"]` was refused (`agent.log`: "Scheduling
+  blocked by aa_guard"), and the model then retried without toolsets, so
+  the job fell back to cron's `[web]`. The model told Casey the job had
+  "full tool access", which was wrong: do not trust its own account of
+  its tools. Without the cron toolset in Telegram at all, `freedom` loops
+  on `clarify` questions instead of saying it cannot schedule.
 - `aa_guard` matches both tool names. A plugin `pre_tool_call` hook blocks by returning `{"action": "block",
   "message": ...}`. A block with no message is ignored and the tool runs.
 - `/cron` is CLI-only. Cron runs load `MEMORY.md`. A job's `script` runs
@@ -185,8 +193,8 @@ This repo is that home.
 
 | Path in the VM | Holds | `--snapshot apply` | Rebuild |
 |---|---|---|---|
-| `~/.hermes/.env` | Bot token, allowed user ID, `TELEGRAM_CRON_THREAD_ID` | Rolled back | Lost. Casey runs `hermes gateway setup` again |
-| `~/.hermes/config.yaml` | Model, toolsets, `dm_topics` and their thread IDs | Rolled back | Lost. The README blocks re-apply them |
+| `~/.hermes/.env` | Bot token, allowed user ID | Rolled back | Lost. Casey runs `hermes gateway setup` again |
+| `~/.hermes/config.yaml` | Model, toolsets, headers | Rolled back | Lost. The README blocks re-apply them |
 | `~/.config/systemd/user/`, `/var/lib/systemd/linger/hermes` | The gateway service and start at boot | Rolled back | Lost. README Telegram step 4 |
 | `~/.hermes/plugins/aa_guard/` | The cron guard | Rolled back, and so is `cronjob` in Telegram's toolsets | Lost. README *Scheduling from Telegram*, guard before tool |
 | `~/.hermes/cron/jobs.json` | Scheduled jobs | Rolled back | Lost. Recreate by asking in chat |

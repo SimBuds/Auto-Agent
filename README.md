@@ -222,92 +222,18 @@ replies steer the next ones. Messages sent while the VM is off or
 rebooting are dropped, not queued. `/skills pending` lists skills waiting
 for approval.
 
-#### Topics
+#### One plain chat
 
-The bot chat is split into three topics, General, Research and Night, each
-with its own history. Memory and skills stay shared across topics. Cron
-job results post in Night. With Threaded Mode
-on there is no plain chat: a message sent in **All Messages** makes Telegram
-open a new topic, which Hermes treats as a new session (seen 2026-11-06). So
-write in General, Research or Night. Do not send `/topic`: it makes the
-main chat a commands-only lobby.
-
-1. On the phone, open BotFather's Mini App (search `botfather`, tap
-   **Open** on the verified result. The `/mybots` text menu does not have
-   this). Then **My bots**, the bot, **Bot Settings**, **Threads
-   Settings**, and turn on **Threaded Mode**.
-2. Back up the config and declare the topics. Telegram is configured from
-   `.env`, so this adds a new `platforms:` section and edits nothing else:
-
-```bash
-# Runs in: inside the VM. Safe to run twice: it skips when dm_topics or a platforms: section already exists.
-CFG=~/.hermes/config.yaml
-BAK=~/.hermes/config.yaml.before-topics
-if grep -q 'dm_topics' "$CFG"; then
-  echo "skip: dm_topics already in config.yaml"
-elif grep -q '^platforms:' "$CFG"; then
-  echo "STOP: config.yaml already has a platforms: section. Nothing changed."
-else
-  TG_ID=$(sed -n 's/^TELEGRAM_ALLOWED_USERS=//p' ~/.hermes/.env | tr -d "\"' ")
-  case "$TG_ID" in
-    ''|*[!0-9]*) echo "STOP: TELEGRAM_ALLOWED_USERS is not one numeric ID. Nothing changed." ;;
-    *)
-      echo "user ID found: ${#TG_ID} digits"
-      if [ -e "$BAK" ]; then echo "skip: backup already exists"; else cp "$CFG" "$BAK" && echo "backup made: $BAK"; fi
-      printf '%s\n' '' 'platforms:' '  telegram:' '    extra:' '      dm_topics:' \
-        "      - chat_id: $TG_ID" '        topics:' '        - name: General' \
-        '        - name: Research' '        - name: Night' >> "$CFG"
-      echo "added dm_topics:"
-      tail -n 9 "$CFG" | sed -E 's/chat_id: [0-9]+/chat_id: <your ID>/'
-      ;;
-  esac
-fi
-```
-
-3. Restart the gateway. It creates the topics and writes their IDs back
-   into `config.yaml`:
-
-```bash
-# Runs in: inside the VM. Telegram is down for about 30 s.
-systemctl --user restart hermes-gateway.service
-sleep 45
-systemctl --user is-active hermes-gateway.service    # must print active
-grep -E "Setting up [0-9]+ DM topic|Created DM topic|Persisted thread_id|not a forum|forums_disabled" ~/.hermes/logs/gateway.log | tail -n 8
-```
-
-The log must show three `Persisted thread_id` lines. `not a forum` means
-Threaded Mode is still off. Turn it on and repeat this step.
-
-4. Send cron results to Night:
-
-```bash
-# Runs in: inside the VM. Safe to run twice: it skips when the key is already set.
-ENVF=~/.hermes/.env
-LOG=~/.hermes/logs/gateway.log
-if grep -q '^TELEGRAM_CRON_THREAD_ID=' "$ENVF"; then
-  echo "skip: TELEGRAM_CRON_THREAD_ID already set"
-else
-  TID=$(sed -n "s/.*Persisted thread_id=\([0-9]*\) for topic 'Night'.*/\1/p" "$LOG" | tail -n 1)
-  echo "Night thread_id: ${TID:-none}"
-  case "$TID" in
-    ''|*[!0-9]*) echo "STOP: no Night topic ID in the gateway log. Nothing changed." ;;
-    *)
-      printf 'TELEGRAM_CRON_THREAD_ID=%s\n' "$TID" >> "$ENVF"
-      echo "added TELEGRAM_CRON_THREAD_ID=$TID"
-      systemctl --user restart hermes-gateway.service
-      sleep 45
-      systemctl --user is-active hermes-gateway.service
-      ;;
-  esac
-fi
-```
-
-To undo, restore `~/.hermes/config.yaml.before-topics`, delete the
-`TELEGRAM_CRON_THREAD_ID=` line from `.env`, and restart the gateway.
+Everything happens in one plain DM with the bot. BotFather's Threaded Mode
+stays off and no `dm_topics` are declared. Topics were tried and dropped
+(2026-11-17): with Threaded Mode on there is no plain chat, every message
+in All Messages opens a new topic, and deleting topics leaves Hermes
+pointing at thread IDs that no longer exist. Send `/new` to start a fresh
+session instead.
 
 #### Asking for research
 
-Send these in the Research topic, starting with `/new`. Edit the topic and
+Send these in the chat, starting with `/new`. Edit the topic and
 the "I run ..." line to suit. Each asks for a quote per fact, because
 tested replies (2026-11-17) were accurate where they quoted the page and
 drifted where they did not: a number added, a word made stronger, or a
@@ -338,9 +264,9 @@ Research this question and answer it for me: QUESTION. Start with a 3-sentence a
 
 #### Scheduling from Telegram
 
-Ask in any topic, in plain words: "every weekday at 8am, find the top
+Ask in the chat, in plain words: "every weekday at 8am, find the top
 three llama.cpp changes and summarize them with links". Hermes creates a
-cron job, and each run posts its result back in the topic you asked from.
+cron job, and each run posts its result back in the chat.
 Ask "list my scheduled tasks" or "remove the llama.cpp task" the same way.
 `/cron` does not work in Telegram (it is CLI-only).
 
@@ -365,7 +291,7 @@ ssh -p 22220 hermes@localhost 'ls ~/.hermes/plugins/aa_guard'   # must list __in
 # Runs in: inside the VM. Safe to run twice. Telegram is down for about 30 s.
 hermes plugins enable aa_guard
 hermes plugins list --plain --no-bundled                    # aa_guard must show enabled
-if hermes plugins list --plain --no-bundled | grep -q 'aa_guard.*enabled'; then
+if hermes plugins list --plain --no-bundled | grep -Eq '^enabled[[:space:]].*[[:space:]]aa_guard$'; then
   hermes config set platform_toolsets.telegram "[web, todo, clarify, session_search, memory, cronjob]"
   grep -n -A7 '^  telegram:' ~/.hermes/config.yaml | head -n 8   # must list the five tools plus cronjob
   systemctl --user restart hermes-gateway.service

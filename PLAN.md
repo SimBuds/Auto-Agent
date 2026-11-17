@@ -4,11 +4,10 @@ A plan for running [Hermes Agent](https://github.com/NousResearch/hermes-agent)
 (Nous Research) on this workstation, against the Local-LLM router, inside a
 QEMU virtual machine. Written 2026-09-25. **Status: installed and verified
 2026-09-25, updated and re-verified 2026-10-09 to 2026-10-20** (Hermes Agent
-`v0.21.6+337.g26610b0`, on `qwen`, v0.22.7 since 2026-11-04). The jobs run
-by hand through their host runners. Since 2026-11-04 Casey talks to Hermes
+`v0.21.6+337.g26610b0`, on `qwen`, v0.22.7 since 2026-11-04). Since 2026-11-04 Casey talks to Hermes
 through Telegram (chosen over Discord the same day, as the simpler setup
-with the same privacy), as a research and data-organizing assistant, mostly
-overnight. The hub is on hold (see *Scheduling*).
+with the same privacy), as a research and data-organizing assistant. The host
+job runners and the planned hub were removed 2026-11-17 (see *Scheduling*).
 
 Hermes is an agent that runs on a schedule or on demand, keeps memory between
 sessions, writes reusable "skills" from work that succeeded, and can report
@@ -42,76 +41,13 @@ That matches the rules the other projects already keep: Jobhunt never submits
 an application, no agent touches the everything4cats server, and SEO-LLM
 approves every stage by hand.
 
-1. **Weekly topic scout for everything4cats, feeding SEO-LLM. The first pilot.**
-   Each week Hermes researches cat products, launches, and seasonal topics,
-   ranks about ten ideas, and writes short briefs to a file. Casey picks the
-   ones worth doing and they become SEO-LLM's inputs (the page slug and
-   `competitors.txt`). SEO-LLM keeps its staged pipeline and its approvals.
-   Decided 2026-09-25: the prompt lives in `jobs/topic-scout.md` and runs by
-   hand first (README, *How to use*). Search uses Hermes's keyless
-   default, which rotates across free vendor tiers, so no key is stored and
-   only public cat-product queries leave the VM. Each idea carries SEO-LLM's
-   own fields (slug, type, suggested keywords, competitor URLs) plus why now,
-   a YMYL flag, and sources. It runs weekly as `jobs/run-topic-scout.sh`
-   (see *Scheduling*).
-
-   Accepted 2026-09-26 after 18 hand runs (Phase 4). What held, and why:
-   - **Two sessions, chained with `--oneshot`.** A research session (`web`
-     and `terminal` tools) appends ideas, then a sweep session (`terminal`
-     only) checks and finishes the file. One session doing both skipped the
-     sweep after long research. Limiting each session's tools with
-     `--toolsets` cut its first prompt from 15,578 tokens to 6,913 and 5,993.
-   - **The prompt is the user message** (`--query-file`). Hermes's
-     compression drops tool results but restates the user message, so rules
-     sent that way survive it, and rules Hermes read from a file did not.
-   - **Search results fill the context, not page reads.** 13 to 17 searches
-     returned 168,000 to 259,000 characters. So each idea is written to disk
-     the moment it is researched. A run that wrote everything at the end
-     cited 13 of 24 URLs that did not exist. Run 18 had no dead URL among 41.
-   - **Keyless search returns no dates** (URL, title and description only),
-     so "timely" means tied to a named event or season in the next 3 months,
-     not a recent source.
-   - **qwen bends every rule that only the prompt states.** It relabelled 8
-     of 10 product comparisons as guides to dodge the roundup cap, resubmitted
-     a taken topic under a new slug, and guessed a holiday's date. Checks
-     after the run caught these, but only after the research time was spent.
-     What held was `jobs/add-idea.sh`, the only way to add an idea, which
-     refuses repeats, relabels and out-of-window timely claims at write time.
-     For later jobs: a rule that matters goes in a script the model has to
-     call.
-   - **The seen list takes only reviewed runs.** Tuning runs made on one day
-     for one window used up that window's topics (run 17 found 4 ideas in 40
-     minutes).
-   - **A run has 50 web searches, total.** Hermes blocks `web_search` after
-     50 calls in one turn (`loop_web_search_cap`), and a `--oneshot` job is
-     one turn. Run 19, under the same conditions as run 18's 10 ideas, spent
-     its 50 re-running searches that compression had dropped (one query 6
-     times) and stopped at 3. The prompt now budgets 4 searches per idea, one
-     idea at a time. That rule is prompt-only, but it held: runs 20 and 21,
-     back to back under run 18's conditions, each reached 10 ideas in 18 to
-     20 minutes with no query repeated, no search cap and 0 dead URLs. Runs
-     22 and 23 (2026-09-27, after the sweep's summary step was made plain and
-     step 1 began printing Black Friday) did the same with no command blocked
-     in any session: four passing runs in a row.
-   - **Casey's review stays the last gate.** Run 18 passed every check (10
-     ideas, 7 timely, 0 dead URLs, 17 minutes of research and 2 of sweep),
-     yet no check can tell a real event link from a pretext, or a retailer
-     listing from an article.
-   - **Scheduled through the runner, accepted 2026-11-04** (Phase 22). Batch
-     1 (2026-11-03, 6 runs 15 minutes apart) passed 2 of 6: research reused
-     an earlier run's file the same day (fixed: the runner starts the file),
-     and the URL check read three passing 500s as DEAD (fixed: 5xx is
-     UNVERIFIED). Batch 2, after both fixes and with Hermes at 131,072
-     context, exited 0 in 6 of 6: 10 ideas in five runs, 0 DEAD URLs, no
-     refusal, no new skill, research 4 to 15 minutes, `qwen` asleep after.
-     Compactions per research session fell from 2 or 3 to 0 or 1. Run 5
-     stopped at 5 ideas: after 7 searches and no compaction, qwen took its
-     prompt for a fresh system prompt, replied "I'm ready", and ended the
-     session. The field check allows fewer than 10 (never pad), so the run
-     passed. Over SSH without a terminal, `--oneshot` still logs reasoning,
-     tool lines and replies, so refusals would show in `run.log`. A guest
-     reboot mid-session hung a run until QEMU exited (fixed in Phase 25: an
-     SSH keepalive, and a dropped session exits 13 `vm`).
+1. **Weekly topic scout for everything4cats, feeding SEO-LLM.** Built and
+   accepted 2026-09-26 after 18 hand runs, and removed 2026-11-17 (Casey)
+   with the other host runners. The runner, prompts, idea scripts and
+   their findings are in git history before that date. What carried
+   over: a script, not the model, should be the only way a result is
+   recorded, and a check the model cannot argue with (the field and URL
+   checks) held where prompt rules did not.
 2. **Public health report for everything4cats.ca.** A daily HTTP check from the
    VM: key pages up, broken internal links, the affiliate disclosure present,
    the Article schema intact. It never goes near the Lightsail server or the
@@ -122,13 +58,11 @@ approves every stage by hand.
    race fix). This is the reading step of the update flow.
    Local-LLM's `scripts/llama-update build` and `swap` stay Casey's, and its
    `scripts/verify-build` runs on the host.
-4. **Router uptime watch.** Dropped 2026-11-02: the hub checks the router
-   from the host. The number stays so references to #5 to #7 hold.
+4. **Router uptime watch.** Dropped 2026-11-02. The number stays so references to #5 to #7 hold.
 5. **Company research for Jobhunt.** Given a company name from `jobhunt list`,
    a one-page brief from public sources: what they do, recent news, stack, red
    flags. Casey passes the names by hand, because the VM cannot see Jobhunt's
-   database. That is deliberate, and it stays hand-fed. Whether the hub may
-   pass company names into the VM is open (see *Open questions*).
+   database. That is deliberate, and it stays hand-fed.
 6. **Daily news digest from public APIs.** Built 2026-09-27 to 2026-10-20
    and removed 2026-11-17 (Casey), when Hermes became a Telegram search
    assistant. The runner, collector, rating script and their findings are
@@ -140,61 +74,24 @@ approves every stage by hand.
    fetch Casey asks for. Hermes's reviewed `reddit-reading` skill runs
    through `terminal`, so it works from the CLI in the VM, not from
    Telegram or a cron job, until Casey registers an OAuth app.
-7. **Weekly routine that ends in a review queue.** Added 2026-09-26. One
-   weekly run, at a quiet hour, that leaves everything waiting for Casey and
-   takes no outward action. Each part runs where it belongs:
-   - **Jobhunt scan:** the hub calls the `jobhunt` CLI on the host, which
-     runs Jobhunt's own deterministic stages and reports new matches to
-     Casey's review queue. Hermes is not involved, and Jobhunt's data stays
-     out of the VM. Jobhunt's planned SSH gate (2026-10-24) is superseded
-     (Jobhunt PLAN, *Automated caller*, 2026-11-01).
-   - **Tailoring and autofill:** Casey triggers them for the matches he
-     picks, as now.
-   - **SEO-LLM ideas:** the topic scout (#1).
-   - **SEO-LLM briefs:** at most, pre-running the research-collection stage
-     for ideas Casey picked, stopping at the first approval gate. An SEO-LLM
-     phase, planned in that repo.
-
-   Never automated, by rule rather than by limit: submitting an application
-   (the final outward-facing action is Casey's, and Jobhunt never clicks
-   Submit), approving SEO-LLM brief stages (they are its quality control),
-   and anything needing Casey's Ahrefs or Search Console logins. The router
-   holds one model at a time, so the parts run one after another, not in
-   parallel. The hub runs them (see *Scheduling*).
-
-Suggested order: start with #1, which needs no repo access, touches nothing
-outward, and feeds a pipeline already in use. Add #3 once Hermes has been
-seen behaving on `qwen`. #6 came after #1 closed, and #7 comes with the hub.
+7. **Weekly routine that ends in a review queue.** Dropped 2026-11-17 with
+   the hub that was to run it. Submitting an application, approving
+   SEO-LLM stages, and anything needing Casey's logins stay never
+   automated, by rule.
 
 ---
 
 ## Scheduling
 
-Decided 2026-11-02. A hub service in its own repository (an API, Postgres
-and n8n, bound to 127.0.0.1) will schedule the jobs. It does not exist yet.
+A hub service (an API, Postgres and n8n) was decided 2026-11-02, put on
+hold 2026-11-04, and dropped 2026-11-17 (Casey) with the host job runners
+it was to schedule. Scheduling now lives in Hermes's own cron, in the VM.
 
-**On hold since 2026-11-04 (Casey).** Casey talks to Hermes through Telegram
-and uses it as a research and data-organizing assistant, mostly overnight,
-and keeps running Jobhunt and SEO-LLM by hand. So the hub and n8n are on
-hold, and the notes below stay for when they return. The runners
-(`jobs/run-topic-scout.sh`) stays as it is, for hand runs. The news digest
-runner was removed 2026-11-17.
-
-- **Each job is one non-interactive host command with a stable contract:**
-  `jobs/run-topic-scout.sh` (weekly). It shares one exit contract with Jobhunt and SEO-LLM: 0 ok, 2 usage, 10
-  input or config, 11 needs a person, 12 a stage failed, 13 a service the run
-  needs is down, 14 busy. It writes `out/scout/status.json`. The README's
-  *How to use* section has the details.
-- **Until the hub exists, Casey runs it by hand,** weekly. After that, the hub's host runner calls them from the repo
-  root, starts each under `setsid`, stops one by its process group, and
-  retries only on 13 and 14.
 - **A Telegram gateway and Hermes's own scheduler run in the VM** (reversed
   2026-11-04, was "No Hermes gateway and no cron in the VM. The caller lives
   on the host."). Reason: Casey queues research from Telegram, mostly
   overnight, and the result posts back there, which needs both inside the
-  VM. The runners still drive Hermes the way a hand-run does (copy in, run
-  over SSH on port 22220, copy out), and never start or stop the VM, take
-  snapshots, or change Hermes's config.
+  VM.
 - **Night tasks were removed on 2026-11-17 (Casey).** They queued
   `NIGHT:` memory entries for one fixed 03:00 job (Phases 34 to 39). Casey
   now wants to schedule tasks from Telegram directly (Phases 45 and 46).
@@ -204,11 +101,9 @@ runner was removed 2026-11-17.
   with `terminal`, read `~/.hermes/.env`, and leak the bot token through a
   fetched URL. Telegram gets the tool only behind a plugin guard that
   rejects anything beyond web (Phase 45). `/cron` is CLI-only.
-- **Hermes never calls the hub,** holds no hub token, and never sees Jobhunt
-  or SEO-LLM data. Every output still ends in a file Casey reviews.
-- **The runners need an SSH key for `hermes@localhost`,** because they never
-  prompt. Installing it is Casey's (README, *Connecting guide*). Installed
-  2026-11-03.
+- **Hermes never sees Jobhunt or SEO-LLM data.**
+- **Casey's SSH key for `hermes@localhost`** (README, *Connecting guide*,
+  installed 2026-11-03) is how files are copied into the VM.
 
 ---
 
@@ -236,9 +131,7 @@ runner was removed 2026-11-17.
 - **The VM can reach every service on the host's loopback,** not only the
   router. On 2026-09-25 that was the router (8080), CUPS (631), and several
   ports held by VS Code. The router-only network variant at the end of the setup
-  guide closes that, at the cost of internet access. The hub will listen there
-  too, so it must require auth on every route, even though Hermes never calls
-  it. Setup step 11 is unaffected.
+  guide closes that, at the cost of internet access.
 - **Hermes runs commands without asking.** With the terminal backend on
   `local`, a terminal tool call runs in the VM with no approval prompt
   (observed 2026-09-25 on `uname -r`). Hermes does scan commands (its
@@ -423,26 +316,6 @@ router serves Hermes*.
   and it was truncated mid-command. Skills now wait in
   `~/.hermes/pending/skills/` until approved.
 
-**How a job session runs**
-- One session doing research and the sweep ran out of room: run 11
-  (2026-09-26) skipped most finishing steps after 39 minutes of research,
-  and used `execute_code` five times against the prompt. Hence two
-  sessions, each limited by `--toolsets`.
-- Without `--oneshot`, `--query-file` on a real terminal leaves the session
-  open for a follow-up, so a chained second session only starts after
-  Ctrl+C.
-- When the prompt arrived through `read_file`, two of three runs lost its
-  rules after compression and wrote an improvised file to the wrong path.
-- A command run over SSH gets the VM's system `PATH`, which lacks
-  `~/.local/bin`, where the installer put `hermes` (2026-11-03). The runner
-  puts that directory first.
-- sshd does not signal a command with no terminal when its client goes
-  away, so killing the ssh client leaves Hermes running in the VM, holding
-  the GPU. Each session therefore runs in its own process group, with the
-  group's id in `~/scout/.hermes.pgid`, and a stopped run stops that group.
-  A background job in a script ignores SIGINT, so the runner also kills its
-  own ssh, or the lock would stay held until the session ended.
-
 **The Telegram gateway** (Phase 33, 2026-11-04)
 - Chosen over Discord: the same privacy (neither encrypts bot chats end to
   end), a simpler setup. Signal was the private option, at the cost of a
@@ -509,19 +382,6 @@ night-task job these were found on was removed 2026-11-17.)
   do not exist on the March daylight-saving night.
 - `HERMES_CRON_TIMEOUT` is unset: 600 s of inactivity, not total time.
 
-**Topic scout checks**
-- The field check catches "Best ..." titles typed anything but `roundup`:
-  run 16 relabelled 8 of 10, and run 21 retitled one "How to Choose the
-  Best ...".
-- `UNVERIFIED` covers 401, 402, 403 and 429 because on 2026-09-26
-  catster.com, nytimes.com (Wirecutter), consumerreports.org, purina.com and
-  dailypaws.com answered 403 or 402 even for a made-up path. It covers 5xx
-  because on 2026-11-03 three pages that answered 500 answered 200 half an
-  hour later.
-- The runner starts today's file and LEFT itself before research, because
-  on 2026-11-03 Hermes skipped the prompt's step 1 on a second run the same
-  day and added to the earlier run's ideas.
-
 ---
 
 ## Open questions
@@ -533,8 +393,6 @@ night-task job these were found on was removed 2026-11-17.)
 - How does Hermes's context compaction behave against the router's HTTP 400 on
   an oversized request?
 - How much does thinking cost on a long job, compared with thinking off?
-- May the hub pass company names into the VM for Good fits #5? Until Casey
-  decides, the company research stays hand-fed. Open since 2026-11-02.
 - Answered 2026-09-25: Hermes makes no model calls while idle (see *How the
   router serves Hermes*), and Hermes sends thinking on by default.
 

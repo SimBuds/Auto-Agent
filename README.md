@@ -3,13 +3,12 @@
 [Hermes Agent](https://github.com/NousResearch/hermes-agent) running in a
 QEMU virtual machine, using models served by a llama.cpp router on the host.
 The VM is the sandbox: Hermes runs its tools freely inside it, and a snapshot
-undoes whatever it did. One job is included, a topic scout for a content
-site, run by one host command.
+undoes whatever it did. You talk to it through a private Telegram chat.
 
 ```text
 Host                                     VM (Debian, quickemu)
   llama.cpp router 127.0.0.1:8080  <----   Hermes Agent, base_url http://10.0.2.2:8080/v1
-  jobs/run-*.sh  ---- ssh -p 22220 ---->   ~/jobs, ~/scout
+  Telegram (your phone)  <-------------   Hermes's Telegram gateway
 ```
 
 **You need:** a Linux host with [quickemu](https://github.com/quickemu-project/quickemu),
@@ -18,7 +17,7 @@ was built against the Local-LLM router (models `gemma`, `qwen`, `lite`,
 context 131,072). Anything that differs on your machine is listed in
 [How to tailor](#how-to-tailor).
 
-[`PLAN.md`](PLAN.md) holds the why: which jobs fit, the findings behind each
+[`PLAN.md`](PLAN.md) holds the why: the findings behind each
 setting, and the load on the GPU.
 
 ## Setup guide
@@ -161,7 +160,7 @@ in `~/VMs/debian-13.7.0-netinst/debian-13.7.0-netinst.ports`. This repo uses
 ssh -p 22220 hermes@localhost
 ```
 
-The job runners never prompt, so they need an SSH key. Install it once, with
+Copying files into the VM with `scp` uses an SSH key. Install it once, with
 the VM running. It asks for the password one last time:
 
 ```bash
@@ -310,23 +309,17 @@ To undo, restore `~/.hermes/config.yaml.before-topics`, delete the
 - RAM, cores and disk are the three lines in setup step 2. 6 GB and 4 cores
   leave room for a model that offloads to the CPU. More can push the host
   into swap.
-- A different port or user: use them in your SSH commands, and set
-  `AUTO_AGENT_VM` (default `hermes@localhost`) and `AUTO_AGENT_SSH_PORT`
-  (default `22220`) for the runners. They read nothing else about the VM.
+- A different port or user: use them in your SSH and `scp` commands.
 
 ### Router and models
 
-- Base URL: `model.base_url` in setup step 6, and `AUTO_AGENT_ROUTER`
-  (default `http://10.0.2.2:8080`), which each run probes from inside the
-  VM.
+- Base URL: `model.base_url` in setup step 6.
 - Model: `model.default`. Pin one, so Hermes never makes the router swap
-  models. Set `AUTO_AGENT_MODEL` (default `qwen`) to the same name: each run
-  checks the router lists it.
+  models.
 - Context: `model.context_length` must match what the router serves. Read it
   with `curl -s http://127.0.0.1:8080/v1/models` (`--ctx-size` in each
   model's `args`, or `n_ctx` once it is loaded). Below 512K, Hermes compacts
-  the conversation at 75% of it, so a smaller value compacts sooner. Each
-  run compares the two and exits 10 on a mismatch, naming the fix.
+  the conversation at 75% of it, so a smaller value compacts sooner.
 
 **Router-only network (optional).** To stop the VM reaching anything else
 on the host's loopback, add this line to the VM's `.conf`, then use
@@ -360,149 +353,8 @@ llama.cpp would fight the router for VRAM. Keep the terminal backend
 `local`, because the VM is the sandbox. A new skill is instructions Hermes
 reuses without asking, so read its `SKILL.md` before trusting it.
 
-### Job prompts and profile
+## Repo layout
 
-**Topic scout** (article ideas for a content site, in the input shape of an
-SEO pipeline):
-
-- `jobs/topic-scout.md` is the research prompt: the site, its audience and
-  the seasons it covers. `jobs/topic-scout-sweep.md` checks and finishes the
-  file.
-- `jobs/topic-scout-seen.txt` lists slugs already covered or suggested, so
-  each run finds new ground. `jobs/topic-scout-seen-archive.txt` holds
-  unreviewed tuning-run slugs, and nothing reads it.
-- `jobs/add-idea.sh` is the only way an idea is added, and
-  `jobs/check-scout.sh` checks the pulled file. They share their word rules,
-  so change both together.
-
-## How to use
-
-### Run a job
-
-With the VM running:
-
-```bash
-# Runs in: local terminal, host, in this repo, with the VM running. About 20 minutes on the GPU.
-bash jobs/run-topic-scout.sh
-echo "exit=$?"
-```
-
-The runner copies its files into the VM, runs the Hermes sessions, pulls the
-result back and checks it. It never starts or stops the VM or changes
-Hermes's config. One lock (`out/.hermes-run.lock`) lets only one job run at
-a time.
-
-| Job         | Writes to `out/`                                                                                                  |
-| ----------- | ------------------------------------------------------------------------------------------------------------------- |
-| Topic scout | `scout/topic-scout-DATE-HHMMSSZ.md`, `scout/status.json`, `scout/run.log`                                     |
-
-Follow a run with `tail -f out/scout/run.log`. Do not start
-a scout run between 23:00 and 01:00 VM time: a date change between its two
-sessions fails the run.
-
-### After a run
-
-**Topic scout.** Review the file. Open each `UNVERIFIED` URL in a browser
-(the site blocks scripts or had a server error), and check each timely
-idea's event date. Then add the run's slugs to the seen list, so later runs
-skip them:
-
-```bash
-# Runs in: local terminal, host, in this repo. NOT safe to run twice for the same file: it would add the slugs again.
-F=out/scout/topic-scout-2026-01-01-000000Z.md   # EDIT: the file you reviewed
-{ printf '\n# Suggested in %s\n' "$(basename "$F" .md)"; sed -n 's/^- Slug: `\(.*\)`$/\1/p' "$F"; } >> jobs/topic-scout-seen.txt
-tail -n 12 jobs/topic-scout-seen.txt
-```
-
-### Exit codes
-
-The runner uses these. A scheduler retries only 13 and 14.
-
-| Exit | Meaning                                                                                                                                                                                         | `status.json` |
-| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- |
-| 0    | Done and checked. Review any `warn` in `checks`                                                                                                                                             | Written         |
-| 10   | Missing input or a setup fault: a job file, the SSH key, `hermes` on the VM's `PATH`, or Hermes's context not matching the router's (`missing` names each) | Written         |
-| 11   | Hermes's scanner refused a command. `reason` holds the line                                                                                                                                   | Written         |
-| 12   | A step or check failed. Read `run.log`                                                                                                                                                        | Written         |
-| 13   | A service is down: the VM (`vm`, including a session whose connection dropped), or the router (`router`). Retry later                                      | Written         |
-| 14   | Another job holds the lock. Nothing ran                                                                                                                                                         | None            |
-| 143  | Stopped by SIGTERM                                                                                                                                                                              | Written         |
-| 130  | Stopped by Ctrl+C. Not retried                                                                                                                                                                  | Written         |
-| 2    | Called with an argument                                                                                                                                                                         | None            |
-
-`status.json` is written atomically, and every key is always present:
-
-```json
-{
-  "job": "topic-scout",
-  "exit_code": 0,
-  "stop_reason": null,
-  "finished_at": "2026-11-02T22:30:00Z",
-  "outputs": ["/path/to/Auto-Agent/out/scout/topic-scout-2026-11-02-223000Z.md"],
-  "checks": [{"id": "urls", "result": "warn", "detail": "38 OK, 4 UNVERIFIED, 0 DEAD"}],
-  "missing": [],
-  "reason": null,
-  "log": "/path/to/Auto-Agent/out/scout/run.log"
-}
-```
-
-`stop_reason` is `input` or `hermes_not_on_path` (10), `decision` (11),
-`failed` (12), `vm` or `router` (13), `terminated` (143),
-`interrupted` (130), or `null`. The scout's `checks` are `skills`, `fields`,
-`urls` and `count` (plus `sweep` when research wrote no file). `count` warns
-when a file has fewer than 10 ideas and nothing in the left-out list, which
-can mean the session stopped early.
-
-### Stop a run
-
-Start it with `setsid` and send SIGTERM to its process group. The runner
-stops Hermes in the VM, writes `status.json` and exits 143. Killing only the
-ssh client leaves Hermes running in the VM.
-
-```bash
-# Runs in: local terminal, host, in this repo.
-setsid bash jobs/run-topic-scout.sh &
-```
-
-To stop it later, find the runner by its command line. `$!` does not work
-here: in an interactive shell `setsid` forks, so `$!` is a process that has
-already exited.
-
-```bash
-# Runs in: local terminal, host. Safe to run twice: with no run going it stops nothing.
-JOB=run-topic-scout.sh
-PIDS=$(pgrep -f "^bash jobs/$JOB")
-echo "runner PIDs found: ${PIDS:-none}"
-if [ -z "$PIDS" ]; then
-  echo "STOP: no $JOB run is going. Nothing was stopped."
-elif [ "$(printf '%s\n' "$PIDS" | wc -l)" -ne 1 ]; then
-  echo "STOP: more than one match. Nothing was stopped."
-else
-  kill -TERM -- "-$PIDS" && echo "sent TERM to process group $PIDS"
-fi
-```
-
-It must print one PID and `sent TERM`. The run's `out/scout/status.json`
-then shows `"exit_code": 143`.
-
-### Tests
-
-The tests run on the host with fakes for the VM, the router and the network:
-
-```bash
-# Runs in: local terminal, host, in this repo. Each must end with failed=0 and exit 0.
-bash jobs/test-run-topic-scout.sh    # passed=58
-bash jobs/test-add-idea.sh           # passed=37
-```
-
-### Repo layout
-
-| Path                                                                  | What it is                                     |
-| --------------------------------------------------------------------- | ---------------------------------------------- |
-| `jobs/run-topic-scout.sh`                                           | The runner                                     |
-| `jobs/runner-lib.sh`                                                | Shared runner code: SSH, lock, status, signals |
-| `jobs/*.md`                                                         | Prompts Hermes receives                        |
-| `jobs/add-idea.sh`, `jobs/check-scout.sh`                         | The scripts that hold the job's rules          |
-| `jobs/test-*`, `jobs/fixtures/`                                   | Tests and their fixtures                       |
-| `out/`                                                              | Results and logs, gitignored                   |
-| `PLAN.md`, `AGENTS.md`                                            | The why, and the rules for coding agents       |
+| Path                   | What it is                               |
+| ---------------------- | ---------------------------------------- |
+| `PLAN.md`, `AGENTS.md` | The why, and the rules for coding agents |

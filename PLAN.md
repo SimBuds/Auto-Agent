@@ -75,6 +75,18 @@ has no access to the host's files or repos.
   reports as a rejected API key. Hermes sends `Host: localhost:8080`
   through `model.default_headers` instead. The check guards against
   browsers, and the VM was already allowed in, so nothing new is opened.
+- `aa_guard` can answer for a router that is not there (2026-11-19, for
+  the ZBOX, where the router is gone whenever the PC is off). With
+  `AA_ROUTER_URL` set in `~/.hermes/.env`, a `pre_llm_call` hook asks the
+  router's `/health` with a 2 second limit before every model call. If the
+  connection fails, the turn ends with "Not online right now. The PC is
+  off. Try again later." and no model call. Any HTTP answer counts as up,
+  including a 503 during a model swap. Unset, there is no check. The value
+  needs its `http://`: urllib treats `127.0.0.1:8080` as a failed
+  connection, which would read as offline for good, so the hook checks the
+  scheme first and skips the check with a warning. If the hook itself
+  raises, Hermes logs it and the turn goes ahead (v0.23.2
+  `agent/turn_context.py`).
 - The router has one slot. Sub-agents and parallel tool calls wait their
   turn, and so do Jobhunt and SEO-LLM while Hermes works.
 - An idle model sleeps after 10 minutes and frees its VRAM. Hermes makes no
@@ -139,6 +151,21 @@ has no access to the host's files or repos.
   "full tool access", which was wrong: do not trust its own account of
   its tools. Without the cron toolset in Telegram at all, `freedom` loops
   on `clarify` questions instead of saying it cannot schedule.
+- A scheduled job that fires while the router is unreachable posts
+  "Not online. The PC was off, so this run was skipped." and waits for its
+  next scheduled time (Casey, 2026-11-19). The `aa_guard` offline hook
+  does this: Hermes runs a job with `platform` set to `cron`, the hook
+  blocks the turn, and Hermes delivers the block message as the job's
+  result under its own "Cronjob Response" header, which names the job.
+  Read in the v0.23.2 source (`cron/scheduler.py`,
+  `agent/conversation_loop.py`), not yet seen live. Three things follow.
+  Hermes records the run as a success, so a job with `continuity` sees
+  that line as its last output. A job created with `wrap_response` false
+  gets the line with no job name. And the block pre-empts Hermes's own
+  handling (`cron/unreachable_retry.py`): without it, a recurring job that
+  cannot reach the model is re-run silently after 5, 15 and 30 minutes,
+  and only then posts a failure notice. Set `AA_ROUTER_URL` aside and
+  that behaviour returns.
 - `aa_guard` matches both tool names. A plugin `pre_tool_call` hook blocks by returning `{"action": "block",
   "message": ...}`. A block with no message is ignored and the tool runs.
 - `/cron` is CLI-only. Cron runs load `MEMORY.md`. A job's `script` runs

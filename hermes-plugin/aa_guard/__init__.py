@@ -6,7 +6,16 @@ page it read) could schedule a job with terminal that reads ~/.hermes/.env.
 Rules: Auto-Agent IMPLEMENT.md Phase 45 (Casey, 2026-11-17, allowlist).
 Block format: Hermes v0.22.7 hermes_cli/plugins.py ignores a block without a
 non-empty message, so every block carries one.
+
+It also answers "not online" when the router cannot be reached (offline_reply,
+IMPLEMENT.md Phase 4, Casey 2026-11-19).
 """
+import logging
+import os
+import urllib.error
+import urllib.request
+
+log = logging.getLogger("aa_guard")
 
 # v0.22.7 registered "cronjob"; v0.23.2 registers "cronjob_manage" (toolset "cronjob").
 # Both stay guarded, so a rename either way cannot silently turn the guard off.
@@ -52,5 +61,56 @@ def guard_cronjob(tool_name="", args=None, **kwargs):
     return None
 
 
+# Offline reply: on the ZBOX the model is reached through a tunnel the PC opens, so the router
+# is gone whenever the PC is off. Before each model call, a quick look at the router's /health.
+# When nothing answers, the turn ends with fixed text and no model call (pre_llm_call "block",
+# Hermes v0.23.2 agent/turn_context.py). Adapted from Friends-Hermes friends_odds, on the ZBOX
+# since 2026-11-15.
+OFFLINE_TEXT = "Not online right now. The PC is off. Try again later."
+# A scheduled run (platform "cron", Hermes v0.23.2 cron/scheduler.py) gets its own wording. Hermes
+# delivers a blocked run's message as the job's result under its own header, which names the job.
+# The block also pre-empts Hermes's 5, 15 and 30 minute re-runs (cron/unreachable_retry.py): the
+# job waits for its next scheduled time (Casey, 2026-11-19).
+OFFLINE_JOB_TEXT = "Not online. The PC was off, so this run was skipped."
+HEALTH_TIMEOUT = 2
+_open = urllib.request.urlopen
+
+
+def router_reachable(base):
+    """False only when the connection fails or times out. Any HTTP answer, even a 503 while the
+    router loads a model, means it is there."""
+    try:
+        with _open(base + "/health", timeout=HEALTH_TIMEOUT):
+            return True
+    except urllib.error.HTTPError:
+        return True
+    except (urllib.error.URLError, OSError):
+        return False
+
+
+def offline_reply(platform="", **kwargs):
+    """pre_llm_call: block the turn with fixed text when AA_ROUTER_URL is set and unreachable.
+    Unset means no check (the VM reaches the router directly)."""
+    del kwargs
+    url = os.environ.get("AA_ROUTER_URL", "").strip().rstrip("/")
+    if not url:
+        return None
+    base = url[:-3].rstrip("/") if url.endswith("/v1") else url
+    # Checked here because urllib reports "127.0.0.1:8080" (no scheme) as a failed connection,
+    # and a typo would then read as offline for good.
+    if not base.startswith(("http://", "https://")):
+        log.warning("AA_ROUTER_URL %r does not start with http:// or https://. Offline check skipped.", url)
+        return None
+    try:
+        up = router_reachable(base)
+    except ValueError as e:
+        log.warning("AA_ROUTER_URL %r is not a URL (%s). Offline check skipped.", url, e)
+        return None
+    if up:
+        return None
+    return {"action": "block", "message": OFFLINE_JOB_TEXT if platform == "cron" else OFFLINE_TEXT}
+
+
 def register(ctx):
     ctx.register_hook("pre_tool_call", guard_cronjob)
+    ctx.register_hook("pre_llm_call", offline_reply)

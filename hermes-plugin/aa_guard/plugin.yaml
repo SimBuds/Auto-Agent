@@ -1,5 +1,6 @@
 name: aa_guard
 version: "1.0"
-description: "Holds cron jobs created from chat to the web tools and the chat they came from. Blocks script, monitor, workdir, other toolsets, other delivery targets, and any unreviewed cronjob argument."
+description: "Holds cron jobs created from chat to the web tools and the chat they came from. Blocks script, monitor, workdir, other toolsets, other delivery targets, and any unreviewed cronjob argument. Also answers \"not online\" with no model call when AA_ROUTER_URL is set and the router is unreachable."
 provides_hooks:
   - pre_tool_call
+  - pre_llm_call

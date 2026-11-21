@@ -1,10 +1,14 @@
 # PLAN.md: Hermes, a research assistant in Telegram
 
+**Status: finished (2026-11-21).** This was a test of Hermes Agent, kept as
+a record. See [How it ended](#how-it-ended).
+
 [Hermes Agent](https://github.com/NousResearch/hermes-agent) (Nous Research)
-runs in a QEMU VM on this workstation, on the Local-LLM router's models, and
-Casey talks to it in a private Telegram chat. This file holds the purpose,
-the principles, what earlier work taught, and the roadmap. The setup steps
-are in [`README.md`](README.md).
+ran in a QEMU VM on this workstation, on the Local-LLM router's models, and
+Casey talked to it in a private Telegram chat. This file holds the purpose,
+the principles, what the work taught, and how it ended. The setup steps
+are in [`README.md`](README.md). The sections below are written in the
+present tense, as they stood while the test ran.
 
 ---
 
@@ -75,8 +79,10 @@ has no access to the host's files or repos.
   reports as a rejected API key. Hermes sends `Host: localhost:8080`
   through `model.default_headers` instead. The check guards against
   browsers, and the VM was already allowed in, so nothing new is opened.
-- `aa_guard` can answer for a router that is not there (2026-11-19, for
-  the ZBOX, where the router is gone whenever the PC is off). With
+- `aa_guard` can answer for a router that is not there (2026-11-19, built
+  for a move to an always-on mini PC, the ZBOX, where the router would be
+  gone whenever the PC was off. The move was dropped, so this is unit
+  tested only). With
   `AA_ROUTER_URL` set in `~/.hermes/.env`, a `pre_llm_call` hook asks the
   router's `/health` with a 2 second limit before every model call. If the
   connection fails, the turn ends with "Not online right now. The PC is
@@ -158,7 +164,8 @@ has no access to the host's files or repos.
   blocks the turn, and Hermes delivers the block message as the job's
   result under its own "Cronjob Response" header, which names the job.
   Read in the v0.23.2 source (`cron/scheduler.py`,
-  `agent/conversation_loop.py`), not yet seen live. Three things follow.
+  `agent/conversation_loop.py`), never run in a live Hermes. Three things
+  follow.
   Hermes records the run as a success, so a job with `continuity` sees
   that line as its last output. A job created with `wrap_response` false
   gets the line with no job name. And the block pre-empts Hermes's own
@@ -233,24 +240,41 @@ repo in the same phase that makes it.
 
 ---
 
-## Roadmap
+## How it ended
 
-1. **Update Hermes.** Snapshot, `hermes update`, check the config keys and
-   Telegram, and read the cron tool's name and arguments in the new
-   version against `aa_guard`.
-2. **Use it as it is.** One prompt pattern per specialty, each tried by hand
-   in Telegram, then written into the README. No code.
-3. **Schedule from chat.** Install `aa_guard`, give Telegram the cron tool,
-   create one test job, and prove a job asking for `terminal` is refused.
-4. **Review after two weeks of real use.** Keep what works. Only then
-   consider a Hub skill or a custom tool, for a gap actually seen.
-5. **Last, no date set: move this Hermes VM onto the ZBOX.** The ZBOX
-   already runs Friends-Hermes around the clock, reaching the PC's router
-   through a reverse SSH tunnel. Moving here too would keep Telegram and
-   scheduled jobs running while the PC is off. Planned when the earlier
-   steps are settled.
+The test ran from 2026-09-25 to 2026-11-21.
+
+**Done**
+1. Hermes was updated to v0.23.2 and its cron tool re-read against
+   `aa_guard` (2026-11-17).
+2. One prompt pattern per specialty was tried by hand in Telegram and
+   written into the README (2026-11-17).
+3. Scheduling from chat worked behind `aa_guard`: a test job delivered its
+   result, and a job asking for `terminal` was refused (2026-11-17).
+4. `aa_guard` gained the offline reply for chat and for scheduled jobs
+   (2026-11-19). It passes its unit tests and was never run in a live
+   Hermes.
+
+**Dropped**
+- The review after two weeks of real use (2026-11-19).
+- The move onto the ZBOX, a fanless mini PC with a 2-core Celeron and 2 GB
+  of RAM (2026-11-21). It has no GPU, so every model call would still have
+  gone to the PC through an SSH forward that the PC opens. Friends-Hermes
+  ran that way from 2026-11-15 to 2026-11-19 and then went back to its VM.
+
+**Where it led.** [Friends-Hermes](https://github.com/SimBuds/Friends-Hermes)
+started on 2026-11-07 from this repo's setup guide, persistence split and
+memory budget. It is the same pattern (Hermes in a VM on the Local-LLM
+router, a plugin that holds the model to what was reviewed) for a Discord
+bot that answers a few friends.
+
+**Left running outside this repo.** The VM, its snapshots and the Telegram
+bot are not part of the repo. Removing them is in the README, *Removing
+it*, and the bot's token is revoked in BotFather.
 
 ## Open questions
+
+These were never answered.
 
 - How much does thinking cost on a long research run, against thinking off?
 - How does Hermes's compaction behave against the router's HTTP 400 on an

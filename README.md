@@ -1,11 +1,22 @@
 # Auto-Agent
 
-[Hermes Agent](https://github.com/NousResearch/hermes-agent) running in a
-QEMU virtual machine, using models served by a llama.cpp router on the host.
-The VM is the sandbox: Hermes runs its tools freely inside it, and a snapshot
-undoes whatever it did. You talk to it through a private Telegram chat, as a
-search assistant for tech and AI news, products and prices, and deep
-research, which can also schedule tasks and post the results back.
+**Status: finished (2026-11-21).** This was a test of
+[Hermes Agent](https://github.com/NousResearch/hermes-agent) on local
+models, run from 2026-09-25 to 2026-11-21. It is kept as a record and is
+no longer developed. What it taught went into
+[Friends-Hermes](https://github.com/SimBuds/Friends-Hermes), which reused
+this setup guide, the VM persistence split and the memory budget for a
+Discord bot that answers a few friends.
+
+The test ran Hermes in a QEMU virtual machine, using models served by a
+llama.cpp router on the host. The VM was the sandbox: Hermes ran its tools
+freely inside it, and a snapshot undid whatever it did. Casey talked to it
+through a private Telegram chat, as a search assistant for tech and AI
+news, products and prices, and deep research, which could also schedule
+tasks and post the results back.
+
+The guide below is written in the present tense, as it was used. It worked
+as written on Hermes v0.23.2.
 
 ```text
 Host                                     VM (Debian, quickemu)
@@ -20,7 +31,7 @@ context 131,072). Anything that differs on your machine is listed in
 [How to tailor](#how-to-tailor).
 
 [`PLAN.md`](PLAN.md) holds the purpose, what was learned behind each
-setting, and the roadmap.
+setting, and how the test ended.
 
 ## Setup guide
 
@@ -281,7 +292,7 @@ be enabled before the tool is added:
 
 ```bash
 # Runs in: local terminal, host, in this repo, with the VM running. Safe to run twice: scp overwrites.
-python3 hermes-plugin/test_aa_guard.py                      # must end passed=23 failed=0
+python3 hermes-plugin/test_aa_guard.py                      # must end passed=41 failed=0
 ssh -p 22220 hermes@localhost 'mkdir -p ~/.hermes/plugins/aa_guard'
 scp -P 22220 hermes-plugin/aa_guard/plugin.yaml hermes-plugin/aa_guard/__init__.py hermes@localhost:.hermes/plugins/aa_guard/
 ssh -p 22220 hermes@localhost 'ls ~/.hermes/plugins/aa_guard'   # must list __init__.py plugin.yaml
@@ -305,6 +316,16 @@ fi
 
 To undo, set `platform_toolsets.telegram` back to the five tools, restart
 the gateway, then `hermes plugins disable aa_guard`.
+
+**Offline reply (built and unit tested, never run in a live Hermes).** The
+same plugin can answer for a router that is not there. With
+`AA_ROUTER_URL=http://127.0.0.1:8080` in `~/.hermes/.env`, it checks the
+router's `/health` before every model call. If nothing answers, a chat
+message gets "Not online right now. The PC is off. Try again later." and a
+scheduled job posts "Not online. The PC was off, so this run was skipped.",
+with no model call. Unset, which is how the VM ran, there is no check. It
+was written for a move to an always-on mini PC that was dropped. The
+details are in PLAN.md, *Model and router* and *Cron*.
 
 ## How to tailor
 
@@ -362,5 +383,5 @@ reuses without asking, so read its `SKILL.md` before trusting it.
 
 | Path                   | What it is                               |
 | ---------------------- | ---------------------------------------- |
-| `hermes-plugin/aa_guard/`, `hermes-plugin/test_aa_guard.py` | The cron guard plugin and its tests |
+| `hermes-plugin/aa_guard/`, `hermes-plugin/test_aa_guard.py` | The plugin (cron guard and offline reply) and its tests |
 | `PLAN.md`, `AGENTS.md` | The why, and the rules for coding agents |
